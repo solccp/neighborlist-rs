@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use crate::cell::Cell;
 use nalgebra::Vector3;
 
@@ -80,45 +81,74 @@ impl CellList {
         for bx in 0..nx {
             for by in 0..ny {
                 for bz in 0..nz {
-                    let bin_idx = (bx as usize) + n_bins.x * ((by as usize) + n_bins.y * (bz as usize));
-                    let mut i = self.head[bin_idx];
-
-                    while i != EMPTY {
-                        // Check neighbors in current bin and adjacent bins
-                        // We iterate over 3x3x3 block around current bin.
-                        // Optimization: For pairs (i, j), we only need to check half the neighbors to avoid double counting?
-                        // Or check all and enforce i < j? Enforcing i < j is simpler for unique pairs.
-                        
-                        // Let's check all 27 neighbors (including self) and enforce i < j
-                        for dx in -1..=1 {
-                            for dy in -1..=1 {
-                                for dz in -1..=1 {
-                                    // Handle PBC for bin indices
-                                    let nbx = (bx + dx).rem_euclid(nx) as usize;
-                                    let nby = (by + dy).rem_euclid(ny) as usize;
-                                    let nbz = (bz + dz).rem_euclid(nz) as usize;
-                                    
-                                    let n_bin_idx = nbx + n_bins.x * (nby + n_bins.y * nbz);
-                                    let mut j = self.head[n_bin_idx];
-
-                                    while j != EMPTY {
-                                        if i < j {
-                                            let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
-                                            if disp.norm_squared() < cutoff_sq {
-                                                neighbors.push((i, j));
-                                            }
-                                        }
-                                        j = self.next[j];
-                                    }
-                                }
-                            }
-                        }
-                        i = self.next[i];
-                    }
+                    self.search_bin(bx, by, bz, nx, ny, nz, n_bins, cell, positions, cutoff_sq, &mut neighbors);
                 }
             }
         }
         neighbors
+    }
+
+    pub fn par_search(&self, cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Vec<(usize, usize)> {
+        let cutoff_sq = cutoff * cutoff;
+        let n_bins = self.num_bins;
+        let nx = n_bins.x as i32;
+        let ny = n_bins.y as i32;
+        let nz = n_bins.z as i32;
+
+        // Parallelize over the x-dimension
+        (0..nx).into_par_iter().map(|bx| {
+            let mut local_neighbors = Vec::new();
+            for by in 0..ny {
+                for bz in 0..nz {
+                    self.search_bin(bx, by, bz, nx, ny, nz, n_bins, cell, positions, cutoff_sq, &mut local_neighbors);
+                }
+            }
+            local_neighbors
+        }).reduce(Vec::new, |mut a, b| {
+            a.extend(b);
+            a
+        })
+    }
+
+    // Helper method to process a single bin
+    fn search_bin(
+        &self, 
+        bx: i32, by: i32, bz: i32, 
+        nx: i32, ny: i32, nz: i32, 
+        n_bins: Vector3<usize>,
+        cell: &Cell, 
+        positions: &[Vector3<f64>], 
+        cutoff_sq: f64,
+        neighbors: &mut Vec<(usize, usize)>
+    ) {
+        let bin_idx = (bx as usize) + n_bins.x * ((by as usize) + n_bins.y * (bz as usize));
+        let mut i = self.head[bin_idx];
+
+        while i != EMPTY {
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    for dz in -1..=1 {
+                        let nbx = (bx + dx).rem_euclid(nx) as usize;
+                        let nby = (by + dy).rem_euclid(ny) as usize;
+                        let nbz = (bz + dz).rem_euclid(nz) as usize;
+                        
+                        let n_bin_idx = nbx + n_bins.x * (nby + n_bins.y * nbz);
+                        let mut j = self.head[n_bin_idx];
+
+                        while j != EMPTY {
+                            if i < j {
+                                let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
+                                if disp.norm_squared() < cutoff_sq {
+                                    neighbors.push((i, j));
+                                }
+                            }
+                            j = self.next[j];
+                        }
+                    }
+                }
+            }
+            i = self.next[i];
+        }
     }
 }
 
@@ -142,6 +172,39 @@ pub fn brute_force_search(cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) 
 mod tests {
     use super::*;
     use nalgebra::Matrix3;
+
+    #[test]
+    fn test_par_search() {
+         let h = Matrix3::new(
+            10.0, 0.0, 0.0,
+            0.0, 10.0, 0.0,
+            0.0, 0.0, 10.0,
+        );
+        let cell = Cell::new(h).unwrap();
+        
+        // Use enough atoms to likely trigger parallelism if configured, 
+        // but verify logic correctness primarily.
+        let positions = vec![
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(1.2, 1.2, 1.2), 
+            Vector3::new(9.8, 9.8, 9.8),
+            Vector3::new(5.0, 5.0, 5.0),
+        ];
+
+        let cutoff = 2.0;
+        let cl = CellList::build(&cell, &positions, cutoff);
+        
+        let seq_result = cl.search(&cell, &positions, cutoff);
+        let par_result = cl.par_search(&cell, &positions, cutoff);
+
+        let mut seq_sorted = seq_result.clone();
+        seq_sorted.sort();
+
+        let mut par_sorted = par_result.clone();
+        par_sorted.sort();
+
+        assert_eq!(par_sorted, seq_sorted);
+    }
 
     #[test]
     fn test_brute_force_reference() {

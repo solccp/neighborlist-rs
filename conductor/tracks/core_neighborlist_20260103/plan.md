@@ -1,10 +1,10 @@
 # Track Plan: Core Neighborlist Implementation (Phase 1)
 
-## Phase 1: Foundation & Math
+## Phase 1: Foundation & Math [checkpoint: 77d41f6]
 - [x] Task: Project Scaffolding (Cargo.toml, PyO3 setup, Directory structure) 63f851e
 - [x] Task: Implement `Cell` struct and Coordinate Transformations (Cartesian <-> Fractional) 243f922
 - [x] Task: Implement PBC Wrapping and Shift Calculation logic ec6eba2
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Math' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Math' (Protocol in workflow.md) 77d41f6
 
 ## Phase 2: Core Search Engine
 - [ ] Task: Implement `CellList` binning logic

@@ -15,8 +15,8 @@
 
 ## Phase 3: Python Bindings
 - [x] Task: Setup PyO3 Module and NumPy integration 8652878
-- [ ] Task: Implement `build_neighborlists` Python wrapper
-- [ ] Task: Implement sorting policy logic (ByIThenJ)
+- [x] Task: Implement `build_neighborlists` Python wrapper 58040ae
+- [x] Task: Implement sorting policy logic (ByIThenJ) 58040ae
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Python Bindings' (Protocol in workflow.md)
 
 ## Phase 4: Verification & Finalization

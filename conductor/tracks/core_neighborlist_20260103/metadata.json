@@ -1,0 +1,8 @@
+{
+  "track_id": "core_neighborlist_20260103",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-01-03T00:00:00Z",
+  "updated_at": "2026-01-03T00:00:00Z",
+  "description": "Core Neighborlist Implementation (Phase 1): Cell Lists, PBC support, and PyO3 bindings."
+}

@@ -7,7 +7,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Math' (Protocol in workflow.md) 77d41f6
 
 ## Phase 2: Core Search Engine
-- [ ] Task: Implement `CellList` binning logic
+- [x] Task: Implement `CellList` binning logic 102c9a8
 - [ ] Task: Implement Sequential Neighbor Search (Brute-force reference)
 - [ ] Task: Implement Cell-List based Neighbor Search
 - [ ] Task: Parallelize Search using Rayon

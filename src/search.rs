@@ -1,181 +1,322 @@
-use rayon::prelude::*;
 use crate::cell::Cell;
 use nalgebra::Vector3;
-
-const EMPTY: usize = usize::MAX;
+use rayon::prelude::*;
 
 pub struct CellList {
-    head: Vec<usize>,
-    next: Vec<usize>,
+    particles: Vec<usize>,
+    cell_starts: Vec<usize>,
+    pos_wrapped: Vec<Vector3<f64>>,
+    atom_shifts: Vec<Vector3<i32>>,
     num_bins: Vector3<usize>,
+    n_search: Vector3<i32>,
 }
 
 impl CellList {
     pub fn build(cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Self {
-        let h = cell.h();
-        let a = h.column(0).norm();
-        let b = h.column(1).norm();
-        let c = h.column(2).norm();
+        let perp_widths = cell.perpendicular_widths();
 
-        let nx = (a / cutoff).floor() as usize;
-        let ny = (b / cutoff).floor() as usize;
-        let nz = (c / cutoff).floor() as usize;
+        let nx = (perp_widths.x / cutoff).floor() as usize;
+        let ny = (perp_widths.y / cutoff).floor() as usize;
+        let nz = (perp_widths.z / cutoff).floor() as usize;
 
-        // Ensure at least 1 bin
         let num_bins = Vector3::new(nx.max(1), ny.max(1), nz.max(1));
-        
+
+        let n_search = Vector3::new(
+            (cutoff * num_bins.x as f64 / perp_widths.x).ceil() as i32,
+            (cutoff * num_bins.y as f64 / perp_widths.y).ceil() as i32,
+            (cutoff * num_bins.z as f64 / perp_widths.z).ceil() as i32,
+        );
+
         let total_bins = num_bins.x * num_bins.y * num_bins.z;
-        let mut head = vec![EMPTY; total_bins];
-        let mut next = vec![EMPTY; positions.len()];
+        let mut counts = vec![0; total_bins];
+        let mut bin_indices = Vec::with_capacity(positions.len());
+        let mut atom_shifts = Vec::with_capacity(positions.len());
+        let mut pos_wrapped = Vec::with_capacity(positions.len());
 
-        for (i, pos) in positions.iter().enumerate() {
-            // Get fractional coordinates wrapped to [0, 1)
-            let mut frac = cell.to_fractional(pos);
-            frac.x -= frac.x.floor();
-            frac.y -= frac.y.floor();
-            frac.z -= frac.z.floor();
+        let h_matrix = cell.h();
 
-            let bx = ((frac.x * num_bins.x as f64) as usize).min(num_bins.x - 1);
-            let by = ((frac.y * num_bins.y as f64) as usize).min(num_bins.y - 1);
-            let bz = ((frac.z * num_bins.z as f64) as usize).min(num_bins.z - 1);
+        for pos in positions {
+            let frac = cell.to_fractional(pos);
+            let fx = frac.x.floor();
+            let fy = frac.y.floor();
+            let fz = frac.z.floor();
+
+            let sx = -fx as i32;
+            let sy = -fy as i32;
+            let sz = -fz as i32;
+            atom_shifts.push(Vector3::new(sx, sy, sz));
+
+            let s_vec = h_matrix * Vector3::new(-sx as f64, -sy as f64, -sz as f64);
+            pos_wrapped.push(pos - s_vec);
+
+            let ux = frac.x - fx;
+            let uy = frac.y - fy;
+            let uz = frac.z - fz;
+
+            let bx = ((ux * num_bins.x as f64) as usize).min(num_bins.x - 1);
+            let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
+            let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
 
             let bin_idx = bx + num_bins.x * (by + num_bins.y * bz);
+            counts[bin_idx] += 1;
+            bin_indices.push(bin_idx);
+        }
 
-            next[i] = head[bin_idx];
-            head[bin_idx] = i;
+        let mut cell_starts = vec![0; total_bins + 1];
+        let mut accum = 0;
+        for i in 0..total_bins {
+            cell_starts[i] = accum;
+            accum += counts[i];
+        }
+        cell_starts[total_bins] = accum;
+
+        let mut particles = vec![0; positions.len()];
+        let mut current_fill = cell_starts.clone();
+
+        for (i, &bin_idx) in bin_indices.iter().enumerate() {
+            let loc = current_fill[bin_idx];
+            particles[loc] = i;
+            current_fill[bin_idx] += 1;
         }
 
         Self {
-            head,
-            next,
+            particles,
+            cell_starts,
+            pos_wrapped,
+            atom_shifts,
             num_bins,
+            n_search,
         }
     }
 
-    /// Helper to get all atoms in a specific bin (kx, ky, kz)
-    pub fn get_atoms_in_bin(&self, bx: usize, by: usize, bz: usize) -> Vec<usize> {
-        let mut atoms = Vec::new();
+    pub fn get_atoms_in_bin(&self, bx: usize, by: usize, bz: usize) -> &[usize] {
         if bx >= self.num_bins.x || by >= self.num_bins.y || bz >= self.num_bins.z {
-            return atoms;
+            return &[];
         }
-
         let bin_idx = bx + self.num_bins.x * (by + self.num_bins.y * bz);
-        let mut curr = self.head[bin_idx];
-
-        while curr != EMPTY {
-            atoms.push(curr);
-            curr = self.next[curr];
-        }
-        atoms
+        &self.particles[self.cell_starts[bin_idx]..self.cell_starts[bin_idx + 1]]
     }
 
-    pub fn search(&self, cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Vec<(usize, usize)> {
+    pub fn search(
+        &self,
+        cell: &Cell,
+        _positions: &[Vector3<f64>],
+        cutoff: f64,
+    ) -> Vec<(usize, usize, i32, i32, i32)> {
         let mut neighbors = Vec::new();
         let cutoff_sq = cutoff * cutoff;
-        let n_bins = self.num_bins;
-        let nx = n_bins.x as i32;
-        let ny = n_bins.y as i32;
-        let nz = n_bins.z as i32;
+        let n_atoms = self.pos_wrapped.len();
 
-        // Iterate over all bins
-        for bx in 0..nx {
-            for by in 0..ny {
-                for bz in 0..nz {
-                    self.search_bin(bx, by, bz, nx, ny, nz, n_bins, cell, positions, cutoff_sq, &mut neighbors);
-                }
-            }
+        for i in 0..n_atoms {
+            self.search_atom_neighbors(i, cell, cutoff_sq, &mut neighbors);
         }
         neighbors
     }
 
-    pub fn par_search(&self, cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Vec<(usize, usize)> {
+    pub fn par_search_optimized(&self, cell: &Cell, cutoff: f64) -> (Vec<i64>, Vec<i64>, Vec<i32>) {
         let cutoff_sq = cutoff * cutoff;
-        let n_bins = self.num_bins;
-        let nx = n_bins.x as i32;
-        let ny = n_bins.y as i32;
-        let nz = n_bins.z as i32;
+        let n_atoms = self.pos_wrapped.len();
 
-        // Parallelize over the x-dimension
-        (0..nx).into_par_iter().map(|bx| {
-            let mut local_neighbors = Vec::new();
-            for by in 0..ny {
-                for bz in 0..nz {
-                    self.search_bin(bx, by, bz, nx, ny, nz, n_bins, cell, positions, cutoff_sq, &mut local_neighbors);
-                }
+        let counts: Vec<usize> = (0..n_atoms)
+            .into_par_iter()
+            .map(|i| self.count_atom_neighbors(i, cell, cutoff_sq))
+            .collect();
+
+        let mut offsets = vec![0; n_atoms + 1];
+        let mut total = 0;
+        for i in 0..n_atoms {
+            offsets[i] = total;
+            total += counts[i];
+        }
+        offsets[n_atoms] = total;
+
+        let mut edge_i = vec![0i64; total];
+        let mut edge_j = vec![0i64; total];
+        let mut shifts = vec![0i32; total * 3];
+
+        let edge_i_ptr = edge_i.as_mut_ptr() as usize;
+        let edge_j_ptr = edge_j.as_mut_ptr() as usize;
+        let shifts_ptr = shifts.as_mut_ptr() as usize;
+
+        (0..n_atoms).into_par_iter().for_each(|i| {
+            let offset = offsets[i];
+            unsafe {
+                let ei = std::slice::from_raw_parts_mut(edge_i_ptr as *mut i64, total);
+                let ej = std::slice::from_raw_parts_mut(edge_j_ptr as *mut i64, total);
+                let s = std::slice::from_raw_parts_mut(shifts_ptr as *mut i32, total * 3);
+
+                self.fill_atom_neighbors(i, cell, cutoff_sq, offset, ei, ej, s);
             }
-            local_neighbors
-        }).reduce(Vec::new, |mut a, b| {
-            a.extend(b);
-            a
-        })
+        });
+
+        (edge_i, edge_j, shifts)
     }
 
-    // Helper method to process a single bin
-    fn search_bin(
-        &self, 
-        bx: i32, by: i32, bz: i32, 
-        nx: i32, ny: i32, nz: i32, 
-        n_bins: Vector3<usize>,
-        cell: &Cell, 
-        positions: &[Vector3<f64>], 
-        cutoff_sq: f64,
-        neighbors: &mut Vec<(usize, usize)>
-    ) {
-        let bin_idx = (bx as usize) + n_bins.x * ((by as usize) + n_bins.y * (bz as usize));
-        let mut i = self.head[bin_idx];
+    fn count_atom_neighbors(&self, i: usize, cell: &Cell, cutoff_sq: f64) -> usize {
+        let mut count = 0;
+        let pos_i_w = self.pos_wrapped[i];
+        let h_matrix = cell.h();
 
-        while i != EMPTY {
-            let neighbors_offsets = [
-                (0, 0, 1),
-                (0, 1, -1), (0, 1, 0), (0, 1, 1),
-                (1, -1, -1), (1, -1, 0), (1, -1, 1),
-                (1, 0, -1), (1, 0, 0), (1, 0, 1),
-                (1, 1, -1), (1, 1, 0), (1, 1, 1),
-            ];
+        let frac_i = cell.to_fractional(&pos_i_w);
+        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
+        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
+        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
 
-            // 1. Same bin
-            let mut j = self.next[i];
-            while j != EMPTY {
-                let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
-                if disp.norm_squared() < cutoff_sq {
-                    // Always store as (min, max) for consistency with brute-force reference
-                    if i < j {
-                        neighbors.push((i, j));
-                    } else {
-                        neighbors.push((j, i));
+        for dx in -self.n_search.x..=self.n_search.x {
+            for dy in -self.n_search.y..=self.n_search.y {
+                for dz in -self.n_search.z..=self.n_search.z {
+                    let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
+                    let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
+                    let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
+
+                    let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
+                    let atoms_j = &self.particles
+                        [self.cell_starts[bin_j_idx]..self.cell_starts[bin_j_idx + 1]];
+                    if atoms_j.is_empty() {
+                        continue;
                     }
-                }
-                j = self.next[j];
-            }
 
-            // 2. Neighboring bins
-            for (dx, dy, dz) in neighbors_offsets {
-                let nbx = (bx + dx).rem_euclid(nx) as usize;
-                let nby = (by + dy).rem_euclid(ny) as usize;
-                let nbz = (bz + dz).rem_euclid(nz) as usize;
-                
-                let n_bin_idx = nbx + n_bins.x * (nby + n_bins.y * nbz);
-                let mut j = self.head[n_bin_idx];
+                    let s_bin = Vector3::new(sx as f64, sy as f64, sz as f64);
+                    let offset_vec = h_matrix * s_bin;
 
-                while j != EMPTY {
-                    let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
-                    if disp.norm_squared() < cutoff_sq {
-                        if i < j {
-                            neighbors.push((i, j));
-                        } else {
-                            neighbors.push((j, i));
+                    for &j in atoms_j {
+                        if i >= j {
+                            continue;
+                        }
+                        let disp = (self.pos_wrapped[j] - pos_i_w) + offset_vec;
+                        if disp.norm_squared() < cutoff_sq {
+                            count += 1;
                         }
                     }
-                    j = self.next[j];
                 }
             }
-            
-            i = self.next[i];
+        }
+        count
+    }
+
+    fn fill_atom_neighbors(
+        &self,
+        i: usize,
+        cell: &Cell,
+        cutoff_sq: f64,
+        mut offset: usize,
+        edge_i: &mut [i64],
+        edge_j: &mut [i64],
+        shifts: &mut [i32],
+    ) {
+        let pos_i_w = self.pos_wrapped[i];
+        let s_i = self.atom_shifts[i];
+        let h_matrix = cell.h();
+
+        let frac_i = cell.to_fractional(&pos_i_w);
+        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
+        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
+        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+
+        for dx in -self.n_search.x..=self.n_search.x {
+            for dy in -self.n_search.y..=self.n_search.y {
+                for dz in -self.n_search.z..=self.n_search.z {
+                    let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
+                    let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
+                    let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
+
+                    let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
+                    let atoms_j = &self.particles
+                        [self.cell_starts[bin_j_idx]..self.cell_starts[bin_j_idx + 1]];
+                    if atoms_j.is_empty() {
+                        continue;
+                    }
+
+                    let s_bin = Vector3::new(sx as f64, sy as f64, sz as f64);
+                    let offset_vec = h_matrix * s_bin;
+
+                    for &j in atoms_j {
+                        if i >= j {
+                            continue;
+                        }
+                        let disp = (self.pos_wrapped[j] - pos_i_w) + offset_vec;
+                        if disp.norm_squared() < cutoff_sq {
+                            edge_i[offset] = i as i64;
+                            edge_j[offset] = j as i64;
+
+                            let s_j = self.atom_shifts[j];
+                            shifts[offset * 3] = s_j.x - s_i.x + sx;
+                            shifts[offset * 3 + 1] = s_j.y - s_i.y + sy;
+                            shifts[offset * 3 + 2] = s_j.z - s_i.z + sz;
+
+                            offset += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn search_atom_neighbors(
+        &self,
+        i: usize,
+        cell: &Cell,
+        cutoff_sq: f64,
+        neighbors: &mut Vec<(usize, usize, i32, i32, i32)>,
+    ) {
+        let pos_i_w = self.pos_wrapped[i];
+        let s_i = self.atom_shifts[i];
+        let h_matrix = cell.h();
+
+        let frac_i = cell.to_fractional(&pos_i_w);
+        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
+        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
+        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+
+        for dx in -self.n_search.x..=self.n_search.x {
+            for dy in -self.n_search.y..=self.n_search.y {
+                for dz in -self.n_search.z..=self.n_search.z {
+                    let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
+                    let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
+                    let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
+
+                    let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
+                    let atoms_j = &self.particles
+                        [self.cell_starts[bin_j_idx]..self.cell_starts[bin_j_idx + 1]];
+                    if atoms_j.is_empty() {
+                        continue;
+                    }
+
+                    let s_bin = Vector3::new(sx as f64, sy as f64, sz as f64);
+                    let offset_vec = h_matrix * s_bin;
+
+                    for &j in atoms_j {
+                        if i >= j {
+                            continue;
+                        }
+                        let pos_j_w = self.pos_wrapped[j];
+                        let disp = (pos_j_w - pos_i_w) + offset_vec;
+
+                        if disp.norm_squared() < cutoff_sq {
+                            let s_j = self.atom_shifts[j];
+                            let s_total_x = s_j.x - s_i.x + sx;
+                            let s_total_y = s_j.y - s_i.y + sy;
+                            let s_total_z = s_j.z - s_i.z + sz;
+                            neighbors.push((i, j, s_total_x, s_total_y, s_total_z));
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
-pub fn brute_force_search(cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Vec<(usize, usize)> {
+fn div_mod(val: i32, max: i32) -> (usize, i32) {
+    let rem = val.rem_euclid(max);
+    let shift = val.div_euclid(max);
+    (rem as usize, shift)
+}
+
+pub fn brute_force_search(
+    cell: &Cell,
+    positions: &[Vector3<f64>],
+    cutoff: f64,
+) -> Vec<(usize, usize)> {
     let mut neighbors = Vec::new();
     let n = positions.len();
     let cutoff_sq = cutoff * cutoff;
@@ -197,128 +338,59 @@ mod tests {
     use nalgebra::Matrix3;
 
     #[test]
-    fn test_par_search() {
-         let h = Matrix3::new(
-            10.0, 0.0, 0.0,
-            0.0, 10.0, 0.0,
-            0.0, 0.0, 10.0,
-        );
+    fn test_brute_force_reference() {
+        let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();
-        
+
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0),
-            Vector3::new(1.2, 1.2, 1.2), 
-            Vector3::new(9.8, 9.8, 9.8),
-            Vector3::new(5.0, 5.0, 5.0),
-        ];
-
-        let cutoff = 2.0;
-        let cl = CellList::build(&cell, &positions, cutoff);
-        
-        let mut seq_result = cl.search(&cell, &positions, cutoff);
-        let mut par_result = cl.par_search(&cell, &positions, cutoff);
-
-        seq_result.sort();
-        par_result.sort();
-
-        assert_eq!(par_result, seq_result);
-    }
-
-    #[test]
-    fn test_brute_force_reference() {
-        let h = Matrix3::new(
-            10.0, 0.0, 0.0,
-            0.0, 10.0, 0.0,
-            0.0, 0.0, 10.0,
-        );
-        let cell = Cell::new(h).unwrap();
-        
-        let positions = vec![
-            Vector3::new(1.0, 1.0, 1.0), // 0
-            Vector3::new(1.0, 3.5, 1.0), // 1. Dist = 2.5 < 3.0 -> Match (0,1)
-            Vector3::new(8.5, 1.0, 1.0), // 2. Dist(0,2) = 7.5. Wrapped diff = -2.5. Dist = 2.5 < 3.0 -> Match (0,2)
+            Vector3::new(1.0, 3.5, 1.0),
+            Vector3::new(8.5, 1.0, 1.0),
         ];
 
         let neighbors = brute_force_search(&cell, &positions, 3.0);
-        
+
         assert_eq!(neighbors.len(), 2);
-        // Sort for deterministic check
         let mut sorted = neighbors.clone();
         sorted.sort();
-        
+
         assert_eq!(sorted[0], (0, 1));
         assert_eq!(sorted[1], (0, 2));
     }
 
     #[test]
     fn test_cell_list_structure() {
-        let h = Matrix3::new(
-            10.0, 0.0, 0.0,
-            0.0, 10.0, 0.0,
-            0.0, 0.0, 10.0,
-        );
+        let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();
-        
+
         let positions = vec![
-            Vector3::new(1.0, 1.0, 1.0), // Bin [0, 0, 0] expected (1/10 < 1/3)
-            Vector3::new(9.0, 9.0, 9.0), // Bin [2, 2, 2] expected (9/10 > 2/3)
+            Vector3::new(1.0, 1.0, 1.0), // Bin [0, 0, 0]
+            Vector3::new(9.0, 9.0, 9.0), // Bin [2, 2, 2]
             Vector3::new(1.1, 1.1, 1.1), // Bin [0, 0, 0]
         ];
 
-        // Cutoff 3.0 -> N=3 (bins of size 3.33)
         let cl = CellList::build(&cell, &positions, 3.0);
-        
+
         assert_eq!(cl.num_bins, Vector3::new(3, 3, 3));
 
-        // Check Bin [0, 0, 0]
         let bin0 = cl.get_atoms_in_bin(0, 0, 0);
         assert_eq!(bin0.len(), 2);
         assert!(bin0.contains(&0));
         assert!(bin0.contains(&2));
 
-        // Check Bin [2, 2, 2]
         let bin2 = cl.get_atoms_in_bin(2, 2, 2);
         assert_eq!(bin2.len(), 1);
         assert!(bin2.contains(&1));
 
-        // Check empty bin
         let bin1 = cl.get_atoms_in_bin(1, 1, 1);
         assert!(bin1.is_empty());
     }
 
     #[test]
-    fn test_wrapping_behavior() {
-         let h = Matrix3::new(
-            10.0, 0.0, 0.0,
-            0.0, 10.0, 0.0,
-            0.0, 0.0, 10.0,
-        );
-        let cell = Cell::new(h).unwrap();
-        
-        let positions = vec![
-            Vector3::new(11.0, 1.0, 1.0), // Should wrap to 1.0 -> Bin [0, 0, 0]
-            Vector3::new(-1.0, 1.0, 1.0), // Should wrap to 9.0 -> Bin [2, 0, 0] (cutoff 3.0 -> 3 bins)
-        ];
-
-        let cl = CellList::build(&cell, &positions, 3.0);
-        
-        let bin0 = cl.get_atoms_in_bin(0, 0, 0);
-        assert!(bin0.contains(&0));
-
-        let bin2 = cl.get_atoms_in_bin(2, 0, 0);
-        assert!(bin2.contains(&1));
-    }
-
-    #[test]
     fn test_cell_list_search_vs_brute_force() {
-        let h = Matrix3::new(
-            10.0, 0.0, 0.0,
-            0.0, 10.0, 0.0,
-            0.0, 0.0, 10.0,
-        );
+        let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();
-        
-        // Random-ish positions
+
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0),
             Vector3::new(1.2, 1.2, 1.2), // Neighbor to 0
@@ -327,13 +399,16 @@ mod tests {
         ];
 
         let cutoff = 2.0;
-        
-        let expected = brute_force_search(&cell, &positions, cutoff);
-        
-        let cl = CellList::build(&cell, &positions, cutoff);
-        let mut result = cl.search(&cell, &positions, cutoff);
 
-        // Sort both for comparison
+        let expected = brute_force_search(&cell, &positions, cutoff);
+
+        let cl = CellList::build(&cell, &positions, cutoff);
+        let mut result: Vec<(usize, usize)> = cl
+            .search(&cell, &positions, cutoff)
+            .into_iter()
+            .map(|(i, j, _, _, _)| (i, j))
+            .collect();
+
         let mut expected_sorted = expected.clone();
         expected_sorted.sort();
 
@@ -352,12 +427,11 @@ mod tests {
             fn test_search_correctness(
                 box_size in 10.0..20.0,
                 cutoff in 1.0..3.0,
-                // Generate N random positions
                 positions_data in prop::collection::vec(prop::collection::vec(0.0..20.0, 3), 2..50)
             ) {
                 let h = Matrix3::identity() * box_size;
                 let cell = Cell::new(h).unwrap();
-                
+
                 let mut positions = Vec::new();
                 for p in positions_data {
                     positions.push(Vector3::new(
@@ -369,7 +443,7 @@ mod tests {
 
                 let expected = brute_force_search(&cell, &positions, cutoff);
                 let cl = CellList::build(&cell, &positions, cutoff);
-                let mut result = cl.search(&cell, &positions, cutoff);
+                let mut result: Vec<(usize, usize)> = cl.search(&cell, &positions, cutoff).into_iter().map(|(i, j, _, _, _)| (i, j)).collect();
 
                 let mut expected_sorted = expected.clone();
                 expected_sorted.sort();

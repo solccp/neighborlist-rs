@@ -6,7 +6,7 @@ pub mod search;
 use crate::cell::Cell;
 use crate::search::CellList;
 use nalgebra::{Matrix3, Vector3};
-use numpy::{IntoPyArray, PyArray2, PyArrayMethods, PyReadonlyArray2};
+use numpy::{IntoPyArray, PyArrayMethods, PyReadonlyArray2};
 use pyo3::types::PyDict;
 
 #[pyclass]

@@ -125,28 +125,51 @@ impl CellList {
         let mut i = self.head[bin_idx];
 
         while i != EMPTY {
-            for dx in -1..=1 {
-                for dy in -1..=1 {
-                    for dz in -1..=1 {
-                        let nbx = (bx + dx).rem_euclid(nx) as usize;
-                        let nby = (by + dy).rem_euclid(ny) as usize;
-                        let nbz = (bz + dz).rem_euclid(nz) as usize;
-                        
-                        let n_bin_idx = nbx + n_bins.x * (nby + n_bins.y * nbz);
-                        let mut j = self.head[n_bin_idx];
+            let neighbors_offsets = [
+                (0, 0, 1),
+                (0, 1, -1), (0, 1, 0), (0, 1, 1),
+                (1, -1, -1), (1, -1, 0), (1, -1, 1),
+                (1, 0, -1), (1, 0, 0), (1, 0, 1),
+                (1, 1, -1), (1, 1, 0), (1, 1, 1),
+            ];
 
-                        while j != EMPTY {
-                            if i < j {
-                                let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
-                                if disp.norm_squared() < cutoff_sq {
-                                    neighbors.push((i, j));
-                                }
-                            }
-                            j = self.next[j];
-                        }
+            // 1. Same bin
+            let mut j = self.next[i];
+            while j != EMPTY {
+                let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
+                if disp.norm_squared() < cutoff_sq {
+                    // Always store as (min, max) for consistency with brute-force reference
+                    if i < j {
+                        neighbors.push((i, j));
+                    } else {
+                        neighbors.push((j, i));
                     }
                 }
+                j = self.next[j];
             }
+
+            // 2. Neighboring bins
+            for (dx, dy, dz) in neighbors_offsets {
+                let nbx = (bx + dx).rem_euclid(nx) as usize;
+                let nby = (by + dy).rem_euclid(ny) as usize;
+                let nbz = (bz + dz).rem_euclid(nz) as usize;
+                
+                let n_bin_idx = nbx + n_bins.x * (nby + n_bins.y * nbz);
+                let mut j = self.head[n_bin_idx];
+
+                while j != EMPTY {
+                    let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
+                    if disp.norm_squared() < cutoff_sq {
+                        if i < j {
+                            neighbors.push((i, j));
+                        } else {
+                            neighbors.push((j, i));
+                        }
+                    }
+                    j = self.next[j];
+                }
+            }
+            
             i = self.next[i];
         }
     }
@@ -182,8 +205,6 @@ mod tests {
         );
         let cell = Cell::new(h).unwrap();
         
-        // Use enough atoms to likely trigger parallelism if configured, 
-        // but verify logic correctness primarily.
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0),
             Vector3::new(1.2, 1.2, 1.2), 
@@ -194,16 +215,13 @@ mod tests {
         let cutoff = 2.0;
         let cl = CellList::build(&cell, &positions, cutoff);
         
-        let seq_result = cl.search(&cell, &positions, cutoff);
-        let par_result = cl.par_search(&cell, &positions, cutoff);
+        let mut seq_result = cl.search(&cell, &positions, cutoff);
+        let mut par_result = cl.par_search(&cell, &positions, cutoff);
 
-        let mut seq_sorted = seq_result.clone();
-        seq_sorted.sort();
+        seq_result.sort();
+        par_result.sort();
 
-        let mut par_sorted = par_result.clone();
-        par_sorted.sort();
-
-        assert_eq!(par_sorted, seq_sorted);
+        assert_eq!(par_result, seq_result);
     }
 
     #[test]
@@ -313,15 +331,52 @@ mod tests {
         let expected = brute_force_search(&cell, &positions, cutoff);
         
         let cl = CellList::build(&cell, &positions, cutoff);
-        let result = cl.search(&cell, &positions, cutoff);
+        let mut result = cl.search(&cell, &positions, cutoff);
 
         // Sort both for comparison
         let mut expected_sorted = expected.clone();
         expected_sorted.sort();
 
-        let mut result_sorted = result.clone();
-        result_sorted.sort();
+        result.sort();
 
-        assert_eq!(result_sorted, expected_sorted);
+        assert_eq!(result, expected_sorted);
+    }
+
+    #[cfg(test)]
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn test_search_correctness(
+                box_size in 10.0..20.0,
+                cutoff in 1.0..3.0,
+                // Generate N random positions
+                positions_data in prop::collection::vec(prop::collection::vec(0.0..20.0, 3), 2..50)
+            ) {
+                let h = Matrix3::identity() * box_size;
+                let cell = Cell::new(h).unwrap();
+                
+                let mut positions = Vec::new();
+                for p in positions_data {
+                    positions.push(Vector3::new(
+                        p[0] % box_size,
+                        p[1] % box_size,
+                        p[2] % box_size,
+                    ));
+                }
+
+                let expected = brute_force_search(&cell, &positions, cutoff);
+                let cl = CellList::build(&cell, &positions, cutoff);
+                let mut result = cl.search(&cell, &positions, cutoff);
+
+                let mut expected_sorted = expected.clone();
+                expected_sorted.sort();
+                result.sort();
+
+                assert_eq!(result, expected_sorted);
+            }
+        }
     }
 }

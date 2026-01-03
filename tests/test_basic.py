@@ -50,15 +50,34 @@ def test_build_neighborlists():
     found_02 = False
     
     for i, j, s in zip(edge_i, edge_j, shifts):
-        if (i == 0 and j == 1) or (i == 1 and j == 0):
-            # We enforce i < j in search, so it should be (0, 1)
-            assert i == 0 and j == 1
+        if i == 0 and j == 1:
             assert np.all(s == [0, 0, 0])
             found_01 = True
-        if (i == 0 and j == 2) or (i == 2 and j == 0):
-            assert i == 0 and j == 2
+        if i == 0 and j == 2:
             assert np.all(s == [-1, 0, 0])
             found_02 = True
             
     assert found_01
     assert found_02
+
+def test_large_system():
+    # 1000 atoms in a 20x20x20 box
+    box_size = 20.0
+    h = [[box_size, 0.0, 0.0], [0.0, box_size, 0.0], [0.0, 0.0, box_size]]
+    cell = neighborlist_rs.PyCell(h)
+    
+    rng = np.random.default_rng(42)
+    positions = rng.random((1000, 3)) * box_size
+    
+    cutoff = 3.5
+    result = neighborlist_rs.build_neighborlists(cell, positions, cutoff)
+    
+    local = result["local"]
+    edge_i = local["edge_i"]
+    edge_j = local["edge_j"]
+    
+    assert len(edge_i) > 0
+    # Basic check for i < j (since we enforce it in search and sort by i then j)
+    assert np.all(edge_i < edge_j)
+    # Check for no self-interactions
+    assert not np.any(edge_i == edge_j)

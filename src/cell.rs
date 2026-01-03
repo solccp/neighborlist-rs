@@ -33,6 +33,33 @@ impl Cell {
     pub fn h_inv(&self) -> &Matrix3<f64> {
         &self.h_inv
     }
+
+    pub fn wrap(&self, cart: &Vector3<f64>) -> Vector3<f64> {
+        let frac = self.to_fractional(cart);
+        let wrapped_frac = Vector3::new(
+            frac.x - frac.x.floor(),
+            frac.y - frac.y.floor(),
+            frac.z - frac.z.floor(),
+        );
+        self.to_cartesian(&wrapped_frac)
+    }
+
+    pub fn get_shift_and_displacement(&self, r_i: &Vector3<f64>, r_j: &Vector3<f64>) -> (Vector3<i32>, Vector3<f64>) {
+        let d_frac = self.to_fractional(&(r_j - r_i));
+        let shift_frac = Vector3::new(
+            -d_frac.x.round(),
+            -d_frac.y.round(),
+            -d_frac.z.round(),
+        );
+        let shift = Vector3::new(
+            shift_frac.x as i32,
+            shift_frac.y as i32,
+            shift_frac.z as i32,
+        );
+        let r_j_img = r_j + self.h * shift_frac;
+        let disp = r_j_img - r_i;
+        (shift, disp)
+    }
 }
 
 #[cfg(test)]
@@ -81,34 +108,60 @@ mod tests {
         assert_relative_eq!(frac.z, 1.0);
     }
 
-        #[test]
-
-        fn test_invalid_cell() {
-
-            let h = Matrix3::zeros();
-
-            let cell = Cell::new(h);
-
-            assert!(cell.is_err());
-
-        }
-
-    
-
-        #[test]
-
-        fn test_getters() {
-
-            let h = Matrix3::identity();
-
-            let cell = Cell::new(h).unwrap();
-
-            assert_eq!(cell.h(), &h);
-
-            assert_eq!(cell.h_inv(), &h);
-
-        }
-
+    #[test]
+    fn test_invalid_cell() {
+        let h = Matrix3::zeros();
+        let cell = Cell::new(h);
+        assert!(cell.is_err());
     }
 
-    
+    #[test]
+    fn test_getters() {
+        let h = Matrix3::identity();
+        let cell = Cell::new(h).unwrap();
+        assert_eq!(cell.h(), &h);
+        assert_eq!(cell.h_inv(), &h);
+    }
+
+    #[test]
+    fn test_wrapping() {
+        let h = Matrix3::new(
+            10.0, 0.0, 0.0,
+            0.0, 10.0, 0.0,
+            0.0, 0.0, 10.0,
+        );
+        let cell = Cell::new(h).unwrap();
+
+        let cart = Vector3::new(15.0, -2.0, 8.0);
+        let wrapped = cell.wrap(&cart);
+
+        assert_relative_eq!(wrapped.x, 5.0);
+        assert_relative_eq!(wrapped.y, 8.0);
+        assert_relative_eq!(wrapped.z, 8.0);
+    }
+
+    #[test]
+    fn test_minimum_image() {
+        let h = Matrix3::new(
+            10.0, 0.0, 0.0,
+            0.0, 10.0, 0.0,
+            0.0, 0.0, 10.0,
+        );
+        let cell = Cell::new(h).unwrap();
+
+        let r_i = Vector3::new(1.0, 1.0, 1.0);
+        let r_j = Vector3::new(9.0, 9.0, 9.0);
+
+        let (shift, disp) = cell.get_shift_and_displacement(&r_i, &r_j);
+
+        // r_j_img = r_j + shift * H = [9, 9, 9] + [-1, -1, -1] * 10 = [-1, -1, -1]
+        // disp = r_j_img - r_i = [-1, -1, -1] - [1, 1, 1] = [-2, -2, -2]
+        assert_eq!(shift.x, -1);
+        assert_eq!(shift.y, -1);
+        assert_eq!(shift.z, -1);
+
+        assert_relative_eq!(disp.x, -2.0);
+        assert_relative_eq!(disp.y, -2.0);
+        assert_relative_eq!(disp.z, -2.0);
+    }
+}

@@ -11,27 +11,6 @@ pub struct CellList {
 
 impl CellList {
     pub fn build(cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Self {
-        // 1. Calculate number of bins
-        // We use the perpendicular widths of the cell to determine safe bin counts.
-        // For a general cell, this is related to the lengths of the reciprocal vectors.
-        // Simplified approach for Phase 1 (focusing on Orthorhombic-ish logic first, but generally safe):
-        // N_i = floor(L_i / cutoff)
-        
-        // A robust way for general cells: N_i = floor(1 / |h_inv_i| / cutoff) ??
-        // Actually, strictly: The distance between parallel planes defined by a lattice vector must be > cutoff.
-        // d_1 = Vol / |a2 x a3|.
-        // Let's stick to the simplest projection logic: 
-        // We map fractional [0,1] to [0, N].
-        // To satisfy the cell list condition, the "width" of a bin in Cartesian space must be >= cutoff.
-        // width_i = |a_i| / N_i >= cutoff  => N_i <= |a_i| / cutoff.
-        
-        // Let's use the column vectors lengths for now. 
-        // NOTE: For highly skewed triclinic cells, this needs strictly perpendicular widths.
-        // For Phase 1, we assume we want to support general cells, so let's try to be somewhat correct.
-        // If we just use lengths of cell vectors, we might violate the condition if the angle is small.
-        // But for now, let's implement the standard logic:
-        // num_bins[i] = floor(|a_i| / cutoff)
-        
         let h = cell.h();
         let a = h.column(0).norm();
         let b = h.column(1).norm();
@@ -55,9 +34,6 @@ impl CellList {
             frac.y -= frac.y.floor();
             frac.z -= frac.z.floor();
 
-            // Calculate bin indices
-            // Clamp to ensure 1.0 doesn't go out of bounds (though floor of 1.0-epsilon should be fine)
-            // But floating point math is tricky.
             let bx = ((frac.x * num_bins.x as f64) as usize).min(num_bins.x - 1);
             let by = ((frac.y * num_bins.y as f64) as usize).min(num_bins.y - 1);
             let bz = ((frac.z * num_bins.z as f64) as usize).min(num_bins.z - 1);
@@ -93,10 +69,68 @@ impl CellList {
     }
 }
 
+pub fn brute_force_search(cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Vec<(usize, usize)> {
+    let mut neighbors = Vec::new();
+    let n = positions.len();
+    let cutoff_sq = cutoff * cutoff;
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
+            if disp.norm_squared() < cutoff_sq {
+                neighbors.push((i, j));
+            }
+        }
+    }
+    neighbors
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use nalgebra::Matrix3;
+
+    #[test]
+    fn test_brute_force_reference() {
+        let h = Matrix3::new(
+            10.0, 0.0, 0.0,
+            0.0, 10.0, 0.0,
+            0.0, 0.0, 10.0,
+        );
+        let cell = Cell::new(h).unwrap();
+        
+        // Two atoms within cutoff (dist = 2.0), one outside (dist = 8.0 -> pbc 2.0?)
+        // Let's make it clear. Cutoff = 3.0.
+        // let positions = vec![
+        //     Vector3::new(1.0, 1.0, 1.0), 
+        //     Vector3::new(1.0, 3.0, 1.0), // Dist = 2.0 < 3.0 (Neighbor)
+        //     Vector3::new(8.0, 1.0, 1.0), // Dist = 7.0. PBC -> -3.0. Dist = 3.0 (Boundary case? Let's make it 3.1)
+        // ];
+        // Wait, 8.0 to 1.0 is distance 7.0.
+        // Image at -2.0. Dist to 1.0 is 3.0.
+        // Let's use 8.1. Dist = 7.1. Img at -1.9. Dist to 1.0 is 2.9 (Neighbor via PBC).
+
+        let positions = vec![
+            Vector3::new(1.0, 1.0, 1.0), // 0
+            Vector3::new(1.0, 3.5, 1.0), // 1. Dist = 2.5 < 3.0 -> Match (0,1)
+            Vector3::new(8.5, 1.0, 1.0), // 2. Dist(0,2) = 7.5. Wrapped diff = -2.5. Dist = 2.5 < 3.0 -> Match (0,2)
+        ];
+
+        let neighbors = brute_force_search(&cell, &positions, 3.0);
+        
+        // Expected pairs: (0,1), (0,2). (1,2) dist? 
+        // 1=(1, 3.5, 1), 2=(8.5, 1, 1).
+        // dx = 7.5 -> -2.5. dy = -2.5. dz = 0.
+        // d^2 = 6.25 + 6.25 = 12.5. d = 3.53 > 3.0. No match.
+        
+        assert_eq!(neighbors.len(), 2);
+        // Sort for deterministic check
+        let mut sorted = neighbors.clone();
+        sorted.sort();
+        
+        assert_eq!(sorted[0], (0, 1));
+        assert_eq!(sorted[1], (0, 2));
+    }
 
     #[test]
     fn test_cell_list_structure() {

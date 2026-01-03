@@ -34,6 +34,16 @@ impl Cell {
         &self.h_inv
     }
 
+    /// Returns the perpendicular widths of the cell (distances between parallel faces).
+    /// d_i = 1 / |h_inv.row(i)|
+    pub fn perpendicular_widths(&self) -> Vector3<f64> {
+        Vector3::new(
+            1.0 / self.h_inv.row(0).norm(),
+            1.0 / self.h_inv.row(1).norm(),
+            1.0 / self.h_inv.row(2).norm(),
+        )
+    }
+
     pub fn wrap(&self, cart: &Vector3<f64>) -> Vector3<f64> {
         let frac = self.to_fractional(cart);
         let wrapped_frac = Vector3::new(
@@ -44,13 +54,13 @@ impl Cell {
         self.to_cartesian(&wrapped_frac)
     }
 
-    pub fn get_shift_and_displacement(&self, r_i: &Vector3<f64>, r_j: &Vector3<f64>) -> (Vector3<i32>, Vector3<f64>) {
+    pub fn get_shift_and_displacement(
+        &self,
+        r_i: &Vector3<f64>,
+        r_j: &Vector3<f64>,
+    ) -> (Vector3<i32>, Vector3<f64>) {
         let d_frac = self.to_fractional(&(r_j - r_i));
-        let shift_frac = Vector3::new(
-            -d_frac.x.round(),
-            -d_frac.y.round(),
-            -d_frac.z.round(),
-        );
+        let shift_frac = Vector3::new(-d_frac.x.round(), -d_frac.y.round(), -d_frac.z.round());
         let shift = Vector3::new(
             shift_frac.x as i32,
             shift_frac.y as i32,
@@ -69,11 +79,7 @@ mod tests {
 
     #[test]
     fn test_coordinate_transformation() {
-        let h = Matrix3::new(
-            10.0, 0.0, 0.0,
-            0.0, 10.0, 0.0,
-            0.0, 0.0, 10.0,
-        );
+        let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();
 
         let cart = Vector3::new(5.0, 2.0, 8.0);
@@ -92,16 +98,12 @@ mod tests {
     #[test]
     fn test_triclinic_cell() {
         // A simple triclinic cell
-        let h = Matrix3::new(
-            10.0, 2.0, 1.0,
-            0.0, 10.0, 0.5,
-            0.0, 0.0, 10.0,
-        );
+        let h = Matrix3::new(10.0, 2.0, 1.0, 0.0, 10.0, 0.5, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();
 
         let cart = Vector3::new(13.0, 10.5, 10.0);
         let frac = cell.to_fractional(&cart);
-        
+
         // r_cart = H * r_frac => r_frac = [1, 1, 1]
         assert_relative_eq!(frac.x, 1.0);
         assert_relative_eq!(frac.y, 1.0);
@@ -125,11 +127,7 @@ mod tests {
 
     #[test]
     fn test_wrapping() {
-        let h = Matrix3::new(
-            10.0, 0.0, 0.0,
-            0.0, 10.0, 0.0,
-            0.0, 0.0, 10.0,
-        );
+        let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();
 
         let cart = Vector3::new(15.0, -2.0, 8.0);
@@ -142,11 +140,7 @@ mod tests {
 
     #[test]
     fn test_minimum_image() {
-        let h = Matrix3::new(
-            10.0, 0.0, 0.0,
-            0.0, 10.0, 0.0,
-            0.0, 0.0, 10.0,
-        );
+        let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();
 
         let r_i = Vector3::new(1.0, 1.0, 1.0);

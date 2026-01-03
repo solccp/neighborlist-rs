@@ -3,7 +3,7 @@
 ## Phase 1: Foundation & Math
 - [x] Task: Project Scaffolding (Cargo.toml, PyO3 setup, Directory structure) 63f851e
 - [x] Task: Implement `Cell` struct and Coordinate Transformations (Cartesian <-> Fractional) 243f922
-- [ ] Task: Implement PBC Wrapping and Shift Calculation logic
+- [x] Task: Implement PBC Wrapping and Shift Calculation logic ec6eba2
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Math' (Protocol in workflow.md)
 
 ## Phase 2: Core Search Engine

@@ -8,7 +8,7 @@
 
 ## Phase 2: Core Search Engine
 - [x] Task: Implement `CellList` binning logic 102c9a8
-- [ ] Task: Implement Sequential Neighbor Search (Brute-force reference)
+- [x] Task: Implement Sequential Neighbor Search (Brute-force reference) 6e26185
 - [ ] Task: Implement Cell-List based Neighbor Search
 - [ ] Task: Parallelize Search using Rayon
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Core Search Engine' (Protocol in workflow.md)

@@ -67,6 +67,59 @@ impl CellList {
         }
         atoms
     }
+
+    pub fn search(&self, cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Vec<(usize, usize)> {
+        let mut neighbors = Vec::new();
+        let cutoff_sq = cutoff * cutoff;
+        let n_bins = self.num_bins;
+        let nx = n_bins.x as i32;
+        let ny = n_bins.y as i32;
+        let nz = n_bins.z as i32;
+
+        // Iterate over all bins
+        for bx in 0..nx {
+            for by in 0..ny {
+                for bz in 0..nz {
+                    let bin_idx = (bx as usize) + n_bins.x * ((by as usize) + n_bins.y * (bz as usize));
+                    let mut i = self.head[bin_idx];
+
+                    while i != EMPTY {
+                        // Check neighbors in current bin and adjacent bins
+                        // We iterate over 3x3x3 block around current bin.
+                        // Optimization: For pairs (i, j), we only need to check half the neighbors to avoid double counting?
+                        // Or check all and enforce i < j? Enforcing i < j is simpler for unique pairs.
+                        
+                        // Let's check all 27 neighbors (including self) and enforce i < j
+                        for dx in -1..=1 {
+                            for dy in -1..=1 {
+                                for dz in -1..=1 {
+                                    // Handle PBC for bin indices
+                                    let nbx = (bx + dx).rem_euclid(nx) as usize;
+                                    let nby = (by + dy).rem_euclid(ny) as usize;
+                                    let nbz = (bz + dz).rem_euclid(nz) as usize;
+                                    
+                                    let n_bin_idx = nbx + n_bins.x * (nby + n_bins.y * nbz);
+                                    let mut j = self.head[n_bin_idx];
+
+                                    while j != EMPTY {
+                                        if i < j {
+                                            let (_, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
+                                            if disp.norm_squared() < cutoff_sq {
+                                                neighbors.push((i, j));
+                                            }
+                                        }
+                                        j = self.next[j];
+                                    }
+                                }
+                            }
+                        }
+                        i = self.next[i];
+                    }
+                }
+            }
+        }
+        neighbors
+    }
 }
 
 pub fn brute_force_search(cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Vec<(usize, usize)> {
@@ -99,17 +152,6 @@ mod tests {
         );
         let cell = Cell::new(h).unwrap();
         
-        // Two atoms within cutoff (dist = 2.0), one outside (dist = 8.0 -> pbc 2.0?)
-        // Let's make it clear. Cutoff = 3.0.
-        // let positions = vec![
-        //     Vector3::new(1.0, 1.0, 1.0), 
-        //     Vector3::new(1.0, 3.0, 1.0), // Dist = 2.0 < 3.0 (Neighbor)
-        //     Vector3::new(8.0, 1.0, 1.0), // Dist = 7.0. PBC -> -3.0. Dist = 3.0 (Boundary case? Let's make it 3.1)
-        // ];
-        // Wait, 8.0 to 1.0 is distance 7.0.
-        // Image at -2.0. Dist to 1.0 is 3.0.
-        // Let's use 8.1. Dist = 7.1. Img at -1.9. Dist to 1.0 is 2.9 (Neighbor via PBC).
-
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0), // 0
             Vector3::new(1.0, 3.5, 1.0), // 1. Dist = 2.5 < 3.0 -> Match (0,1)
@@ -117,11 +159,6 @@ mod tests {
         ];
 
         let neighbors = brute_force_search(&cell, &positions, 3.0);
-        
-        // Expected pairs: (0,1), (0,2). (1,2) dist? 
-        // 1=(1, 3.5, 1), 2=(8.5, 1, 1).
-        // dx = 7.5 -> -2.5. dy = -2.5. dz = 0.
-        // d^2 = 6.25 + 6.25 = 12.5. d = 3.53 > 3.0. No match.
         
         assert_eq!(neighbors.len(), 2);
         // Sort for deterministic check
@@ -189,5 +226,39 @@ mod tests {
 
         let bin2 = cl.get_atoms_in_bin(2, 0, 0);
         assert!(bin2.contains(&1));
+    }
+
+    #[test]
+    fn test_cell_list_search_vs_brute_force() {
+        let h = Matrix3::new(
+            10.0, 0.0, 0.0,
+            0.0, 10.0, 0.0,
+            0.0, 0.0, 10.0,
+        );
+        let cell = Cell::new(h).unwrap();
+        
+        // Random-ish positions
+        let positions = vec![
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(1.2, 1.2, 1.2), // Neighbor to 0
+            Vector3::new(9.8, 9.8, 9.8), // Neighbor to 0 via PBC
+            Vector3::new(5.0, 5.0, 5.0), // Isolated
+        ];
+
+        let cutoff = 2.0;
+        
+        let expected = brute_force_search(&cell, &positions, cutoff);
+        
+        let cl = CellList::build(&cell, &positions, cutoff);
+        let result = cl.search(&cell, &positions, cutoff);
+
+        // Sort both for comparison
+        let mut expected_sorted = expected.clone();
+        expected_sorted.sort();
+
+        let mut result_sorted = result.clone();
+        result_sorted.sort();
+
+        assert_eq!(result_sorted, expected_sorted);
     }
 }

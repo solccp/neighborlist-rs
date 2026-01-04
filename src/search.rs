@@ -6,7 +6,10 @@ use tracing::info_span;
 pub struct CellList {
     /// particles[sorted_idx] = original_idx
     particles: Vec<usize>,
+    /// cell_starts[bin_rank] = start index in particles
     cell_starts: Vec<usize>,
+    /// Maps linear bin index (bx + nx*(by + ny*bz)) to Morton rank
+    bin_ranks: Vec<usize>,
     /// Wrapped positions in sorted order (index matches sorted_idx).
     pos_wrapped: Vec<Vector3<f64>>,
     /// Wrapping shifts in sorted order (index matches sorted_idx).
@@ -36,19 +39,37 @@ impl CellList {
                 .collect()
         };
 
-        // 2. Sort atoms spatially
+        // 2. Sort atoms spatially by global Z-order
         let mut atom_data = atom_data;
         {
             let _s = info_span!("spatial_sort").entered();
             atom_data.sort_unstable_by_key(|&(z, _)| z);
         }
 
-        // 3. Reorder and wrap positions/shifts based on spatial sort
+        // 3. Setup bins and compute Morton ranks for bins
         let perp_widths = cell.perpendicular_widths();
         let nx = (perp_widths.x / cutoff).floor() as usize;
         let ny = (perp_widths.y / cutoff).floor() as usize;
         let nz = (perp_widths.z / cutoff).floor() as usize;
         let num_bins = Vector3::new(nx.max(1), ny.max(1), nz.max(1));
+        let total_bins = num_bins.x * num_bins.y * num_bins.z;
+
+        let mut bin_ranks = vec![0; total_bins];
+        {
+            let _s = info_span!("compute_bin_ranks").entered();
+            let mut bin_morton: Vec<(u64, usize)> = (0..total_bins)
+                .map(|i| {
+                    let bx = i % num_bins.x;
+                    let by = (i / num_bins.x) % num_bins.y;
+                    let bz = i / (num_bins.x * num_bins.y);
+                    (interleave_3(bx as u64) | (interleave_3(by as u64) << 1) | (interleave_3(bz as u64) << 2), i)
+                })
+                .collect();
+            bin_morton.sort_unstable_by_key(|&(z, _)| z);
+            for (rank, &(_z, linear_idx)) in bin_morton.iter().enumerate() {
+                bin_ranks[linear_idx] = rank;
+            }
+        }
 
         let n_search = Vector3::new(
             (cutoff * num_bins.x as f64 / perp_widths.x).ceil() as i32,
@@ -85,16 +106,16 @@ impl CellList {
                     let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
                     let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
 
-                    let bin_idx = bx + num_bins.x * (by + num_bins.y * bz);
-                    (bin_idx, wrapped_pos, atom_shift, original_idx)
+                    let linear_idx = bx + num_bins.x * (by + num_bins.y * bz);
+                    let rank = bin_ranks[linear_idx];
+                    (rank, wrapped_pos, atom_shift, original_idx)
                 })
                 .collect()
         };
 
-        let total_bins = num_bins.x * num_bins.y * num_bins.z;
         let mut counts = vec![0; total_bins];
-        for (bin_idx, _, _, _) in &reordered_data {
-            counts[*bin_idx] += 1;
+        for (rank, _, _, _) in &reordered_data {
+            counts[*rank] += 1;
         }
 
         let mut cell_starts = vec![0; total_bins + 1];
@@ -112,18 +133,19 @@ impl CellList {
 
         {
             let _s = info_span!("bin_fill").entered();
-            for (bin_idx, wrapped_pos, atom_shift, original_idx) in reordered_data {
-                let loc = current_fill[bin_idx];
+            for (rank, wrapped_pos, atom_shift, original_idx) in reordered_data {
+                let loc = current_fill[rank];
                 final_pos_wrapped[loc] = wrapped_pos;
                 final_atom_shifts[loc] = atom_shift;
                 final_particles[loc] = original_idx;
-                current_fill[bin_idx] += 1;
+                current_fill[rank] += 1;
             }
         }
 
         Self {
             particles: final_particles,
             cell_starts,
+            bin_ranks,
             pos_wrapped: final_pos_wrapped,
             atom_shifts: final_atom_shifts,
             num_bins,
@@ -135,8 +157,9 @@ impl CellList {
         if bx >= self.num_bins.x || by >= self.num_bins.y || bz >= self.num_bins.z {
             return &[];
         }
-        let bin_idx = bx + self.num_bins.x * (by + self.num_bins.y * bz);
-        &self.particles[self.cell_starts[bin_idx]..self.cell_starts[bin_idx + 1]]
+        let linear_idx = bx + self.num_bins.x * (by + self.num_bins.y * bz);
+        let rank = self.bin_ranks[linear_idx];
+        &self.particles[self.cell_starts[rank]..self.cell_starts[rank + 1]]
     }
 
     pub fn search(
@@ -220,9 +243,10 @@ impl CellList {
                     let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
                     let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
 
-                    let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
-                    let start_j = self.cell_starts[bin_j_idx];
-                    let end_j = self.cell_starts[bin_j_idx + 1];
+                    let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
+                    let rank = self.bin_ranks[linear_idx];
+                    let start_j = self.cell_starts[rank];
+                    let end_j = self.cell_starts[rank + 1];
 
                     if start_j == end_j {
                         continue;
@@ -274,9 +298,10 @@ impl CellList {
                     let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
                     let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
 
-                    let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
-                    let start_j = self.cell_starts[bin_j_idx];
-                    let end_j = self.cell_starts[bin_j_idx + 1];
+                    let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
+                    let rank = self.bin_ranks[linear_idx];
+                    let start_j = self.cell_starts[rank];
+                    let end_j = self.cell_starts[rank + 1];
 
                     if start_j == end_j {
                         continue;
@@ -332,9 +357,10 @@ impl CellList {
                     let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
                     let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
 
-                    let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
-                    let start_j = self.cell_starts[bin_j_idx];
-                    let end_j = self.cell_starts[bin_j_idx + 1];
+                    let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
+                    let rank = self.bin_ranks[linear_idx];
+                    let start_j = self.cell_starts[rank];
+                    let end_j = self.cell_starts[rank + 1];
 
                     if start_j == end_j {
                         continue;

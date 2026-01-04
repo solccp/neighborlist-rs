@@ -34,7 +34,7 @@ To build a high-performance, safe, and deterministic neighborlist construction l
     -   Automatic rebuild detection based on displacement.
 
 ## Non-Functional Requirements
--   **Performance:** $O(N)$ scaling for large systems.
+-   **Performance:** $O(N)$ scaling for large systems with optimizations for cache locality (Z-order sorting) and adaptive parallelization.
 -   **Parallelism:** Multi-core CPU support (e.g., via Rayon) to maximize construction speed for large atomistic systems.
 -   **Determinism:** Configurable sorting policies for reproducible results.
 -   **Safety:** Robust handling of edge cases (sparse/dense systems) without panics.

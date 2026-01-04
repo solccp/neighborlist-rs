@@ -22,3 +22,5 @@
 ## Development Tools
 - **clippy:** For linting and ensuring idiomatic Rust code.
 - **rustfmt:** For consistent code formatting.
+- **tracing:** For instrumentation and performance monitoring.
+- **dhat/perf:** For memory and CPU profiling during optimization cycles.

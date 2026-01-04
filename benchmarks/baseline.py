@@ -26,7 +26,7 @@ def generate_ethanol_system(target_n_atoms, density=1.0):
     return atoms
 
 def run_baseline():
-    systems = [10000, 20000]
+    systems = [10000, 20000, 100000]
     cutoffs = [6.0, 14.0]
     n_threads = psutil.cpu_count(logical=True)
     n_repeat = 5

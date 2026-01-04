@@ -17,8 +17,8 @@ def test_ase_pbc_true():
     cutoff = 3.0 # Nearest neighbor is ~2.55
     res = neighborlist_rs.build_from_ase(atoms, cutoff)
     
-    edge_i = res["local"]["edge_i"]
-    assert len(edge_i) > 0
+    edge_index = res["edge_index"]
+    assert edge_index.shape[1] > 0
     
     # Check against explicit call
     cell = neighborlist_rs.PyCell(atoms.get_cell().T.tolist()) # Transpose for column-major
@@ -99,9 +99,10 @@ def test_ase_no_pbc():
     res = neighborlist_rs.build_from_ase(atoms, 1.5)
     # Should work (isolated)
     # The library returns half-neighbor lists (i < j), so we expect only 1 edge (0->1)
-    assert len(res["local"]["edge_i"]) == 1
-    assert res["local"]["edge_i"][0] == 0
-    assert res["local"]["edge_j"][0] == 1
+    edge_index = res["edge_index"]
+    assert edge_index.shape[1] == 1
+    assert edge_index[0, 0] == 0
+    assert edge_index[1, 0] == 1
 
 @pytest.mark.skipif(not ASE_AVAILABLE, reason="ASE not installed")
 def test_ase_multi_cutoff():

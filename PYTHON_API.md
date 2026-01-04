@@ -109,6 +109,19 @@ for i, rc in enumerate(cutoffs):
     print(f"Cutoff {rc}A: {edge_index.shape[1]} edges")
 ```
 
+#### Disjoint Shells
+By default, neighbor lists are cumulative (e.g., $r < 14.0$ includes $r < 6.0$).
+To get exclusive shells (e.g., $6.0 \le r < 14.0$), pass `disjoint=True`:
+
+```python
+results = neighborlist_rs.build_neighborlists_multi(
+    cell, positions, cutoffs, disjoint=True
+)
+# results[0]: r < 6.0
+# results[1]: 6.0 <= r < 14.0
+# results[2]: 14.0 <= r < 20.0
+```
+
 You can also pass `labels` to get a dictionary keyed by string labels instead of indices:
 
 ```python
@@ -150,6 +163,8 @@ results = neighborlist_rs.build_neighborlists_batch_multi(
 mlp_edges = results[0]["edge_index"]
 dispersion_edges = results[1]["edge_index"]
 ```
+
+You can also use `disjoint=True` here to generate exclusive shells for efficient memory usage.
 
 With labels:
 ```python

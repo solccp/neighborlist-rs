@@ -18,9 +18,9 @@ def test_build_neighborlists_batch_basic():
     # This should fail as build_neighborlists_batch is not yet implemented
     result = neighborlist_rs.build_neighborlists_batch(positions, batch, cutoff=cutoff)
     
-    local = result["local"]
-    edge_i = local["edge_i"]
-    edge_j = local["edge_j"]
+    edge_index = result["edge_index"]
+    edge_i = edge_index[0]
+    edge_j = edge_index[1]
     
     # System 1 (indices 0, 1): pair (0, 1)
     # System 2 (indices 2, 3, 4): pairs (2, 3), (3, 4), (2, 4) [dist 2.0 < 2.5]
@@ -90,13 +90,15 @@ def test_build_neighborlists_batch_multi_pbc():
     # Verify against single calls
     for i, r in enumerate(cutoffs):
         # System 1 single
-        res1 = neighborlist_rs.build_neighborlists(neighborlist_rs.PyCell(cells[0].T.tolist()), pos1, r)["local"]
+        res1 = neighborlist_rs.build_neighborlists(neighborlist_rs.PyCell(cells[0].T.tolist()), pos1, r)
         # System 2 single
-        res2 = neighborlist_rs.build_neighborlists(None, pos2, r)["local"]
+        res2 = neighborlist_rs.build_neighborlists(None, pos2, r)
         
         # Combine manually
-        expected_i = np.concatenate([res1["edge_i"], res2["edge_i"] + len(pos1)])
-        expected_j = np.concatenate([res1["edge_j"], res2["edge_j"] + len(pos1)])
+        ei1 = res1["edge_index"]
+        ei2 = res2["edge_index"]
+        expected_i = np.concatenate([ei1[0], ei2[0] + len(pos1)])
+        expected_j = np.concatenate([ei1[1], ei2[1] + len(pos1)])
         
         # RS result
         actual_i = result[i]["edge_index"][0]

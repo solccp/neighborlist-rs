@@ -37,20 +37,19 @@ def test_build_neighborlists():
     cutoff = 2.0
     result = neighborlist_rs.build_neighborlists(cell, positions, cutoff)
     
-    assert "local" in result
-    local = result["local"]
-    
-    edge_i = local["edge_i"]
-    edge_j = local["edge_j"]
-    shifts = local["shift"]
+    assert "edge_index" in result
+    edge_index = result["edge_index"]
+    shifts = result["shift"]
     
     # Pairs: (0, 1) and (0, 2)
-    assert len(edge_i) == 2
+    assert edge_index.shape[1] == 2
     
     found_01 = False
     found_02 = False
     
-    for i, j, s in zip(edge_i, edge_j, shifts):
+    for k in range(edge_index.shape[1]):
+        i, j = edge_index[:, k]
+        s = shifts[k]
         if i == 0 and j == 1:
             assert np.all(s == [0, 0, 0])
             found_01 = True
@@ -73,9 +72,9 @@ def test_large_system():
     cutoff = 3.5
     result = neighborlist_rs.build_neighborlists(cell, positions, cutoff)
     
-    local = result["local"]
-    edge_i = local["edge_i"]
-    edge_j = local["edge_j"]
+    edge_index = result["edge_index"]
+    edge_i = edge_index[0]
+    edge_j = edge_index[1]
     
     assert len(edge_i) > 0
     # Basic check for i < j (since we enforce it in search and sort by i then j)
@@ -94,7 +93,7 @@ def test_silicon_bulk():
     cutoff = 2.5 
     
     result = neighborlist_rs.build_neighborlists(cell, pos, cutoff)
-    edge_i = result["local"]["edge_i"]
+    edge_i = result["edge_index"][0]
     
     # Each Si atom has 4 neighbors
     # Total edges (undirected) = 8 * 4 / 2 = 16
@@ -111,10 +110,10 @@ def test_build_neighborlists_no_cell():
     # cell=None should trigger auto-box
     result = neighborlist_rs.build_neighborlists(None, positions, cutoff)
     
-    local = result["local"]
-    edge_i = local["edge_i"]
-    edge_j = local["edge_j"]
-    shifts = local["shift"]
+    edge_index = result["edge_index"]
+    edge_i = edge_index[0]
+    edge_j = edge_index[1]
+    shifts = result["shift"]
     
     assert len(edge_i) == 1
     assert edge_i[0] == 0
@@ -154,18 +153,12 @@ def test_build_neighborlists_multi():
     
     # Verify correctness against single calls
     for i, r in enumerate(cutoffs):
-        single = neighborlist_rs.build_neighborlists(cell, positions, r)["local"]
+        single = neighborlist_rs.build_neighborlists(cell, positions, r)
         multi = result[i]
         
         # Sort for comparison
-        si, sj = single["edge_i"], single["edge_j"]
+        si, sj = single["edge_index"][0], single["edge_index"][1]
         mi, mj = multi["edge_index"][0], multi["edge_index"][1]
-        
-        ks = np.lexsort((sj, si))
-        km = np.lexsort((mj, mi))
-        
-        np.testing.assert_array_equal(si[ks], mi[km])
-        np.testing.assert_array_equal(sj[ks], mj[km])
         
         ks = np.lexsort((sj, si))
         km = np.lexsort((mj, mi))

@@ -114,7 +114,8 @@ def run_benchmarks():
 
             # Use parallel=True for correctness check (default behavior)
             res_rs = neighborlist_rs.build_neighborlists(cell_rs, pos, cutoff, parallel=True)
-            i_rs, j_rs = res_rs["local"]["edge_i"], res_rs["local"]["edge_j"]
+            edge_index = res_rs["edge_index"]
+            i_rs, j_rs = edge_index[0], edge_index[1]
             
             # Filter out self-interactions from Vesin to match neighborlist-rs behavior
             p_v = set((min(u, v), max(u, v)) for u, v in zip(i_v, j_v) if u != v)

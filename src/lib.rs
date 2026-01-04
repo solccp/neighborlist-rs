@@ -140,16 +140,16 @@ fn build_neighborlists<'py>(
     };
 
     let dict = PyDict::new(py);
-    let local = PyDict::new(py);
 
     let n_edges = edge_i.len();
-    local.set_item("edge_i", numpy::PyArray1::from_vec(py, edge_i))?;
-    local.set_item("edge_j", numpy::PyArray1::from_vec(py, edge_j))?;
+    let mut edge_i = edge_i;
+    edge_i.extend(edge_j);
+    let edge_index = numpy::PyArray1::from_vec(py, edge_i).reshape((2, n_edges))?;
+    dict.set_item("edge_index", edge_index)?;
 
     let shifts_arr = numpy::PyArray1::from_vec(py, shifts).reshape((n_edges, 3))?;
-    local.set_item("shift", shifts_arr)?;
+    dict.set_item("shift", shifts_arr)?;
 
-    dict.set_item("local", local)?;
     Ok(dict)
 }
 
@@ -221,25 +221,27 @@ fn build_from_ase<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (atoms, cutoffs, labels=None))]
+#[pyo3(signature = (atoms, cutoffs, labels=None, disjoint=false))]
 fn build_multi_from_ase<'py>(
     py: Python<'py>,
     atoms: &Bound<'py, PyAny>,
     cutoffs: Vec<f64>,
     labels: Option<Vec<String>>,
+    disjoint: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let (positions, py_cell) = extract_ase_data(atoms)?;
-    build_neighborlists_multi(py, py_cell.as_ref(), positions, cutoffs, labels)
+    build_neighborlists_multi(py, py_cell.as_ref(), positions, cutoffs, labels, disjoint)
 }
 
 #[pyfunction]
-#[pyo3(signature = (cell, positions, cutoffs, labels=None))]
+#[pyo3(signature = (cell, positions, cutoffs, labels=None, disjoint=false))]
 fn build_neighborlists_multi<'py>(
     py: Python<'py>,
     cell: Option<&PyCell>,
     positions: PyReadonlyArray2<'_, f64>,
     cutoffs: Vec<f64>,
     labels: Option<Vec<String>>,
+    disjoint: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let pos_view = positions.as_array();
     let n_atoms = pos_view.shape()[0];
@@ -309,10 +311,10 @@ fn build_neighborlists_multi<'py>(
     let mic_safe = max_cutoff * 2.0 < min_width;
 
     let results = if n_atoms < BRUTE_FORCE_THRESHOLD && mic_safe {
-        search::brute_force_search_multi(&cell_inner, &pos_vec, &cutoffs)
+        search::brute_force_search_multi(&cell_inner, &pos_vec, &cutoffs, disjoint)
     } else {
         let cl = CellList::build(&cell_inner, &pos_vec, max_cutoff);
-        cl.par_search_multi(&cell_inner, &cutoffs)
+        cl.par_search_multi(&cell_inner, &cutoffs, disjoint)
     };
 
     let result_dict = PyDict::new(py);
@@ -364,14 +366,14 @@ fn build_neighborlists_batch<'py>(
 
     if n_total == 0 {
         let dict = PyDict::new(py);
-        let local = PyDict::new(py);
-        local.set_item("edge_i", numpy::PyArray1::from_vec(py, vec![0i64; 0]))?;
-        local.set_item("edge_j", numpy::PyArray1::from_vec(py, vec![0i64; 0]))?;
-        local.set_item(
+        dict.set_item(
+            "edge_index",
+            numpy::PyArray1::from_vec(py, vec![0i64; 0]).reshape((2, 0))?,
+        )?;
+        dict.set_item(
             "shift",
             numpy::PyArray1::from_vec(py, vec![0i32; 0]).reshape((0, 3))?,
         )?;
-        dict.set_item("local", local)?;
         return Ok(dict);
     }
 
@@ -529,19 +531,19 @@ fn build_neighborlists_batch<'py>(
     }
 
     let dict = PyDict::new(py);
-    let local = PyDict::new(py);
-    local.set_item("edge_i", numpy::PyArray1::from_vec(py, final_edge_i))?;
-    local.set_item("edge_j", numpy::PyArray1::from_vec(py, final_edge_j))?;
-    local.set_item(
+    let mut final_edge_i = final_edge_i;
+    final_edge_i.extend(final_edge_j);
+    let edge_index = numpy::PyArray1::from_vec(py, final_edge_i).reshape((2, total_edges))?;
+    dict.set_item("edge_index", edge_index)?;
+    dict.set_item(
         "shift",
         numpy::PyArray1::from_vec(py, final_shift).reshape((total_edges, 3))?,
     )?;
-    dict.set_item("local", local)?;
     Ok(dict)
 }
 
 #[pyfunction]
-#[pyo3(signature = (positions, batch, cells=None, cutoffs=vec![5.0], labels=None))]
+#[pyo3(signature = (positions, batch, cells=None, cutoffs=vec![5.0], labels=None, disjoint=false))]
 fn build_neighborlists_batch_multi<'py>(
     py: Python<'py>,
     positions: PyReadonlyArray2<'_, f64>,
@@ -549,6 +551,7 @@ fn build_neighborlists_batch_multi<'py>(
     cells: Option<PyReadonlyArray3<'_, f64>>,
     cutoffs: Vec<f64>,
     labels: Option<Vec<String>>,
+    disjoint: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let pos_view = positions.as_array();
     let batch_view = batch.as_array();
@@ -685,10 +688,10 @@ fn build_neighborlists_batch_multi<'py>(
             let mic_safe = max_cutoff * 2.0 < min_width;
 
             let system_results = if n_atoms_local < BRUTE_FORCE_THRESHOLD && mic_safe {
-                search::brute_force_search_multi(&cell_inner, &pos_vec, &cutoffs)
+                search::brute_force_search_multi(&cell_inner, &pos_vec, &cutoffs, disjoint)
             } else {
                 let cl = CellList::build(&cell_inner, &pos_vec, max_cutoff);
-                cl.par_search_multi(&cell_inner, &cutoffs)
+                cl.par_search_multi(&cell_inner, &cutoffs, disjoint)
             };
 
             let offset = start as i64;

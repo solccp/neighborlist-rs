@@ -251,12 +251,18 @@ impl CellList {
         &self,
         cell: &Cell,
         cutoffs: &[f64],
+        disjoint: bool,
     ) -> Vec<(Vec<i64>, Vec<i64>, Vec<i32>)> {
         let _span = info_span!("CellList::par_search_multi").entered();
         let n_atoms = self.particles.len();
         let n_cutoffs = cutoffs.len();
-        let cutoffs_sq: Vec<f64> = cutoffs.iter().map(|c| c * c).collect();
-        let max_cutoff_sq = cutoffs_sq.iter().cloned().fold(f64::NAN, f64::max); // handle NaN safely by propagating it
+
+        // Sort cutoffs to handle disjoint correctly and efficiently
+        let mut sorted_indices: Vec<usize> = (0..n_cutoffs).collect();
+        sorted_indices.sort_by(|&a, &b| cutoffs[a].partial_cmp(&cutoffs[b]).unwrap());
+        
+        let sorted_cutoffs_sq: Vec<f64> = sorted_indices.iter().map(|&i| cutoffs[i] * cutoffs[i]).collect();
+        let max_cutoff_sq = sorted_cutoffs_sq.iter().cloned().last().unwrap_or(0.0);
 
         // 1. Count pass
         let num_threads = rayon::current_num_threads();
@@ -273,9 +279,10 @@ impl CellList {
                     self.count_atom_neighbors_multi(
                         i,
                         cell,
-                        &cutoffs_sq,
+                        &sorted_cutoffs_sq,
                         max_cutoff_sq,
                         atom_counts,
+                        disjoint,
                     );
                 });
         }
@@ -294,16 +301,10 @@ impl CellList {
         }
 
         // 3. Allocate results
-        // We can't easily share a mutable Vec of tuples across threads without UnsafeCell or splitting.
-        // Easier to allocate separate huge vectors for each cutoff's i, j, shifts.
-        // We need to pass raw pointers to the fill function.
-
         let mut result_edge_i: Vec<Vec<i64>> = totals.iter().map(|&t| vec![0; t]).collect();
         let mut result_edge_j: Vec<Vec<i64>> = totals.iter().map(|&t| vec![0; t]).collect();
         let mut result_shifts: Vec<Vec<i32>> = totals.iter().map(|&t| vec![0; t * 3]).collect();
 
-        // Create a struct/vec of Pointers to pass to the closure
-        // pointers[k] = (ptr_i, ptr_j, ptr_s)
         let ptrs: Vec<(usize, usize, usize)> = (0..n_cutoffs)
             .map(|k| {
                 (
@@ -321,34 +322,30 @@ impl CellList {
                 .into_par_iter()
                 .with_min_len(min_len)
                 .for_each(|i| {
-                    // Prepare slice pointers for this atom
-                    // For each cutoff k, we need a mutable slice starting at offsets[i*n_cutoffs + k]
-                    // We construct unsafe slices inside the fill function
-
-                    // We need to pass the *global* ptrs and the *local* offsets for atom i
                     let atom_offsets = &offsets[i * n_cutoffs..(i + 1) * n_cutoffs];
 
                     unsafe {
                         self.fill_atom_neighbors_multi(
                             i,
                             cell,
-                            &cutoffs_sq,
+                            &sorted_cutoffs_sq,
                             max_cutoff_sq,
                             atom_offsets,
                             &ptrs,
+                            disjoint,
                         );
                     }
                 });
         }
 
-        // Assemble return
-        let mut final_results = Vec::with_capacity(n_cutoffs);
-        for k in 0..n_cutoffs {
-            final_results.push((
-                std::mem::take(&mut result_edge_i[k]),
-                std::mem::take(&mut result_edge_j[k]),
-                std::mem::take(&mut result_shifts[k]),
-            ));
+        // Assemble return - Reorder back to original input cutoff order
+        let mut final_results = vec![(Vec::new(), Vec::new(), Vec::new()); n_cutoffs];
+        for (rank, &orig_idx) in sorted_indices.iter().enumerate() {
+            final_results[orig_idx] = (
+                std::mem::take(&mut result_edge_i[rank]),
+                std::mem::take(&mut result_edge_j[rank]),
+                std::mem::take(&mut result_shifts[rank]),
+            );
         }
         final_results
     }
@@ -357,9 +354,10 @@ impl CellList {
         &self,
         i: usize,
         cell: &Cell,
-        cutoffs_sq: &[f64],
+        sorted_cutoffs_sq: &[f64],
         max_cutoff_sq: f64,
         counts: &mut [u32],
+        disjoint: bool,
     ) {
         let pos_i_w = self.pos_wrapped[i];
         let h_matrix = cell.h();
@@ -398,14 +396,13 @@ impl CellList {
                             (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
                         let dist_sq = disp.norm_squared();
 
-                        // Check against max cutoff first to skip quickly
                         if dist_sq < max_cutoff_sq {
-                            // Check against all cutoffs
-                            // Since cutoffs might not be sorted, we check all.
-                            // If they are sorted, we could optimize, but N=3 is small.
-                            for (k, &rc_sq) in cutoffs_sq.iter().enumerate() {
+                            for (k, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
                                 if dist_sq < rc_sq {
                                     counts[k] += 1;
+                                    if disjoint {
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -422,10 +419,11 @@ impl CellList {
         &self,
         i: usize,
         cell: &Cell,
-        cutoffs_sq: &[f64],
+        sorted_cutoffs_sq: &[f64],
         max_cutoff_sq: f64,
-        atom_offsets: &[usize], // offsets for this atom for each cutoff
-        ptrs: &[(usize, usize, usize)], // global pointers for each cutoff
+        atom_offsets: &[usize], // offsets for this atom for each rank
+        ptrs: &[(usize, usize, usize)], // global pointers for each rank
+        disjoint: bool,
     ) {
         let pos_i_w = self.pos_wrapped[i];
         let s_i = self.atom_shifts[i];
@@ -438,9 +436,7 @@ impl CellList {
 
         let i_orig = self.particles[i];
 
-        // Local counters to track how many we've written for this atom so far
-        // We use them to increment the offsets relative to `atom_offsets`
-        let mut local_counts = vec![0usize; cutoffs_sq.len()];
+        let mut local_counts = vec![0usize; sorted_cutoffs_sq.len()];
 
         for dx in -self.n_search.x..=self.n_search.x {
             for dy in -self.n_search.y..=self.n_search.y {
@@ -475,9 +471,8 @@ impl CellList {
                             let mut sy_diff = 0;
                             let mut sz_diff = 0;
 
-                            for (k, &rc_sq) in cutoffs_sq.iter().enumerate() {
+                            for (k, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
                                 if dist_sq < rc_sq {
-                                    // Found neighbor for cutoff k
                                     if !computed_shifts {
                                         let s_j = self.atom_shifts[sorted_idx_j];
                                         sx_diff = s_j.x - s_i.x + sx;
@@ -504,6 +499,9 @@ impl CellList {
                                     }
 
                                     local_counts[k] += 1;
+                                    if disjoint {
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -512,6 +510,7 @@ impl CellList {
             }
         }
     }
+
 
     fn count_atom_neighbors(&self, i: usize, cell: &Cell, cutoff_sq: f64) -> usize {
         let pos_i_w = self.pos_wrapped[i];
@@ -759,12 +758,17 @@ pub fn brute_force_search_multi(
     cell: &Cell,
     positions: &[Vector3<f64>],
     cutoffs: &[f64],
+    disjoint: bool,
 ) -> Vec<(Vec<i64>, Vec<i64>, Vec<i32>)> {
     let n = positions.len();
     let n_cutoffs = cutoffs.len();
-    let cutoffs_sq: Vec<f64> = cutoffs.iter().map(|c| c * c).collect();
-    // Safety for max: if empty cutoffs, this might be issue but assuming valid input
-    let max_cutoff_sq = cutoffs_sq.iter().cloned().fold(0.0, f64::max);
+
+    // Sort cutoffs to handle disjoint correctly
+    let mut sorted_indices: Vec<usize> = (0..n_cutoffs).collect();
+    sorted_indices.sort_by(|&a, &b| cutoffs[a].partial_cmp(&cutoffs[b]).unwrap());
+    
+    let sorted_cutoffs_sq: Vec<f64> = sorted_indices.iter().map(|&i| cutoffs[i] * cutoffs[i]).collect();
+    let max_cutoff_sq = sorted_cutoffs_sq.iter().cloned().last().unwrap_or(0.0);
 
     let capacity = n * BRUTE_FORCE_CAPACITY_FACTOR;
 
@@ -778,28 +782,31 @@ pub fn brute_force_search_multi(
             let d2 = disp.norm_squared();
 
             if d2 < max_cutoff_sq {
-                for (k, &rc_sq) in cutoffs_sq.iter().enumerate() {
+                for (k, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
                     if d2 < rc_sq {
                         edge_i_vecs[k].push(i as i64);
                         edge_j_vecs[k].push(j as i64);
                         shifts_vecs[k].push(shift.x);
                         shifts_vecs[k].push(shift.y);
                         shifts_vecs[k].push(shift.z);
+                        if disjoint {
+                            break;
+                        }
                     }
                 }
             }
         }
     }
 
-    let mut results = Vec::with_capacity(n_cutoffs);
-    for k in 0..n_cutoffs {
-        results.push((
-            std::mem::take(&mut edge_i_vecs[k]),
-            std::mem::take(&mut edge_j_vecs[k]),
-            std::mem::take(&mut shifts_vecs[k]),
-        ));
+    let mut final_results = vec![(Vec::new(), Vec::new(), Vec::new()); n_cutoffs];
+    for (rank, &orig_idx) in sorted_indices.iter().enumerate() {
+        final_results[orig_idx] = (
+            std::mem::take(&mut edge_i_vecs[rank]),
+            std::mem::take(&mut edge_j_vecs[rank]),
+            std::mem::take(&mut shifts_vecs[rank]),
+        );
     }
-    results
+    final_results
 }
 
 #[cfg(test)]

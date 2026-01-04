@@ -18,6 +18,7 @@ thiserror = "1.0.61"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dhat = { version = "0.3", optional = true }
+smallvec = "1.13"
 
 [features]
 dhat-heap = ["dep:dhat"]

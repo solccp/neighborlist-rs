@@ -183,21 +183,21 @@ impl CellList {
         let cutoff_sq = cutoff * cutoff;
         let n_atoms = self.particles.len();
 
-        let counts: Vec<usize> = {
+        let counts: Vec<u32> = {
             let _s = info_span!("count_pass").entered();
             (0..n_atoms)
                 .into_par_iter()
-                .map(|i| self.count_atom_neighbors(i, cell, cutoff_sq))
+                .map(|i| self.count_atom_neighbors(i, cell, cutoff_sq) as u32)
                 .collect()
         };
 
-        let mut offsets = vec![0; n_atoms + 1];
-        let mut total = 0;
-        for i in 0..n_atoms {
-            offsets[i] = total;
-            total += counts[i];
+        let mut offsets = Vec::with_capacity(n_atoms + 1);
+        let mut total: usize = 0;
+        for &c in &counts {
+            offsets.push(total);
+            total += c as usize;
         }
-        offsets[n_atoms] = total;
+        offsets.push(total);
 
         let mut edge_i = vec![0i64; total];
         let mut edge_j = vec![0i64; total];

@@ -3,6 +3,10 @@ use pyo3::prelude::*;
 pub mod cell;
 pub mod search;
 
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 use crate::cell::Cell;
 use crate::search::CellList;
 use nalgebra::{Matrix3, Vector3};

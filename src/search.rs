@@ -493,6 +493,26 @@ mod tests {
         assert_eq!(result, expected_sorted);
     }
 
+    #[cfg(feature = "dhat-heap")]
+    #[test]
+    fn test_memory_profile() {
+        let _profiler = dhat::Profiler::new_heap();
+
+        let h = Matrix3::identity() * 20.0;
+        let cell = Cell::new(h).unwrap();
+
+        let mut positions = Vec::new();
+        for i in 0..100 {
+            for j in 0..100 {
+                positions.push(Vector3::new(i as f64 * 0.2, j as f64 * 0.2, 0.0));
+            }
+        }
+
+        let cutoff = 3.0;
+        let cl = CellList::build(&cell, &positions, cutoff);
+        let _ = cl.par_search_optimized(&cell, cutoff);
+    }
+
     #[cfg(test)]
     mod proptests {
         use super::*;

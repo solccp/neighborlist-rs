@@ -17,6 +17,8 @@ nalgebra = "0.33.0"
 thiserror = "1.0.61"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+wide = "0.7.26"
+bytemuck = { version = "1.16.1", features = ["derive"] }
 dhat = { version = "0.3", optional = true }
 
 [features]

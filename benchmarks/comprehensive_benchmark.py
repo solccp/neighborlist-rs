@@ -13,7 +13,7 @@ from torch_cluster import radius_graph
 
 # Benchmark settings
 CUTOFFS = [6.0, 14.0, 20.0]
-N_REPEAT = 3  # Reduced repeat for faster execution of more cases
+N_REPEAT = 7  # Reduced repeat for faster execution of more cases
 
 def benchmark_neighborlist_rs_worker(filepath, cutoff, n_threads):
     """Executes the benchmark in a subprocess to ensure Rayon pool is sized correctly."""

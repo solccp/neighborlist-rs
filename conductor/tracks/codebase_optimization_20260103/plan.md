@@ -26,7 +26,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 4: Parallelization Tuning' (Protocol in workflow.md) 9dcfd95
 
 ## Phase 5: Final Validation
-- [ ] Task: Run full `proptest` suite with high iteration count (1000+) to ensure robustness
+- [~] Task: Run full `proptest` suite with high iteration count (1000+) to ensure robustness
 - [ ] Task: Final comparison against `vesin` across all cutoffs (6.0, 14.0, 20.0)
 - [ ] Task: Update `README.md` with new performance metrics and scaling charts
 - [ ] Task: Conductor - User Manual Verification 'Phase 5: Final Validation' (Protocol in workflow.md)

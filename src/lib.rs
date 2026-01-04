@@ -47,7 +47,7 @@ impl PyCell {
 #[pyo3(signature = (cell, positions, cutoff, parallel=true))]
 fn build_neighborlists<'py>(
     py: Python<'py>,
-    cell: &PyCell,
+    cell: Option<&PyCell>,
     positions: PyReadonlyArray2<'_, f64>,
     cutoff: f64,
     parallel: bool,
@@ -61,16 +61,46 @@ fn build_neighborlists<'py>(
     }
 
     let mut pos_vec = Vec::with_capacity(n_atoms);
+    let mut min_bound = Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+    let mut max_bound = Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+
     for row in pos_view.rows() {
-        pos_vec.push(Vector3::new(row[0], row[1], row[2]));
+        let p = Vector3::new(row[0], row[1], row[2]);
+        if cell.is_none() {
+            if p.x < min_bound.x { min_bound.x = p.x; }
+            if p.y < min_bound.y { min_bound.y = p.y; }
+            if p.z < min_bound.z { min_bound.z = p.z; }
+            if p.x > max_bound.x { max_bound.x = p.x; }
+            if p.y > max_bound.y { max_bound.y = p.y; }
+            if p.z > max_bound.z { max_bound.z = p.z; }
+        }
+        pos_vec.push(p);
     }
 
-    let cl = CellList::build(&cell.inner, &pos_vec, cutoff);
+    let cell_inner = if let Some(c) = cell {
+        c.inner.clone()
+    } else {
+        // Infer cell from positions for non-PBC
+        let margin = cutoff + 1.0;
+        let span = max_bound - min_bound;
+        let lx = span.x + 2.0 * margin;
+        let ly = span.y + 2.0 * margin;
+        let lz = span.z + 2.0 * margin;
+        
+        let h_mat = Matrix3::new(
+            lx, 0.0, 0.0,
+            0.0, ly, 0.0,
+            0.0, 0.0, lz,
+        );
+        Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
+    };
+
+    let cl = CellList::build(&cell_inner, &pos_vec, cutoff);
 
     let (edge_i, edge_j, shifts) = if parallel {
-        cl.par_search_optimized(&cell.inner, cutoff)
+        cl.par_search_optimized(&cell_inner, cutoff)
     } else {
-        let neighbors = cl.search(&cell.inner, &pos_vec, cutoff);
+        let neighbors = cl.search(&cell_inner, &pos_vec, cutoff);
         let n_edges = neighbors.len();
         let mut ei = Vec::with_capacity(n_edges);
         let mut ej = Vec::with_capacity(n_edges);

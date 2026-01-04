@@ -1,6 +1,7 @@
 import neighborlist_rs
 import pytest
 import numpy as np
+from ase.build import bulk
 
 def test_pycell_creation():
     h = [[10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]]
@@ -81,3 +82,42 @@ def test_large_system():
     assert np.all(edge_i < edge_j)
     # Check for no self-interactions
     assert not np.any(edge_i == edge_j)
+
+def test_silicon_bulk():
+    # Silicon diamond structure, cubic cell
+    atoms = bulk('Si', 'diamond', a=5.43, cubic=True)
+    pos = atoms.get_positions()
+    h_T = atoms.get_cell()[:].T.tolist()
+    
+    cell = neighborlist_rs.PyCell(h_T)
+    # 1st neighbor distance is a * sqrt(3) / 4 = 5.43 * 0.433 = 2.35
+    cutoff = 2.5 
+    
+    result = neighborlist_rs.build_neighborlists(cell, pos, cutoff)
+    edge_i = result["local"]["edge_i"]
+    
+    # Each Si atom has 4 neighbors
+    # Total edges (undirected) = 8 * 4 / 2 = 16
+    assert len(edge_i) == 16
+
+def test_build_neighborlists_no_cell():
+    # Two atoms close to each other
+    positions = np.array([
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+    ], dtype=np.float64)
+    
+    cutoff = 2.0
+    # cell=None should trigger auto-box
+    result = neighborlist_rs.build_neighborlists(None, positions, cutoff)
+    
+    local = result["local"]
+    edge_i = local["edge_i"]
+    edge_j = local["edge_j"]
+    shifts = local["shift"]
+    
+    assert len(edge_i) == 1
+    assert edge_i[0] == 0
+    assert edge_j[0] == 1
+    # No PBC shifts expected for auto-boxed isolated system
+    assert np.all(shifts[0] == [0, 0, 0])

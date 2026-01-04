@@ -4,8 +4,7 @@ import os
 import psutil
 import subprocess
 import sys
-from ase import Atoms
-from ase.build import molecule, bulk
+from ase.io import read
 import vesin
 import neighborlist_rs
 import torch
@@ -16,37 +15,9 @@ from torch_cluster import radius_graph
 CUTOFFS = [6.0, 14.0, 20.0]
 N_REPEAT = 3  # Reduced repeat for faster execution of more cases
 
-def generate_random_molecule(n_atoms, box_size=500.0):
-    """Generates a random cluster of atoms in a massive box (effectively non-PBC)."""
-    rng = np.random.default_rng(42)
-    spread = 2.0 * (n_atoms ** (1/3))
-    # Place atoms in the center of the massive box
-    positions = (rng.random((n_atoms, 3)) - 0.5) * spread + box_size / 2
-    symbols = rng.choice(['C', 'H', 'O', 'N'], size=n_atoms)
-    atoms = Atoms(symbols=symbols, positions=positions, cell=[box_size]*3, pbc=True)
-    return atoms
-
-def generate_ethanol_system(target_n_atoms, density=1.0):
-    """Generates a box of ethanol molecules matching target atom count and density."""
-    eth = molecule('CH3CH2OH')
-    n_atoms_per_mol = len(eth)
-    n_mols = int(np.ceil(target_n_atoms / n_atoms_per_mol))
-    vol = (n_mols * 46.07) / (0.6022 * density)
-    l = vol ** (1/3)
-    atoms = Atoms(cell=[l, l, l], pbc=True)
-    rng = np.random.default_rng(42)
-    for _ in range(n_mols):
-        mol = eth.copy()
-        mol.rotate(rng.random() * 360, 'x')
-        mol.rotate(rng.random() * 360, 'y')
-        mol.rotate(rng.random() * 360, 'z')
-        pos = rng.random(3) * l
-        mol.translate(pos)
-        atoms += mol
-    return atoms
-
-def benchmark_neighborlist_rs_worker(n_atoms_type, n_atoms_val, cutoff, n_threads):
+def benchmark_neighborlist_rs_worker(filepath, cutoff, n_threads):
     """Executes the benchmark in a subprocess to ensure Rayon pool is sized correctly."""
+    use_parallel = "True" if n_threads > 1 else "False"
     cmd = [
         sys.executable, "-c",
         f"""
@@ -55,48 +26,21 @@ os.environ["RAYON_NUM_THREADS"] = "{n_threads}"
 import neighborlist_rs
 import numpy as np
 import time
-from ase.build import molecule
-from ase import Atoms
+from ase.io import read
 
-def generate_random_molecule(n_atoms, box_size=500.0):
-    rng = np.random.default_rng(42)
-    spread = 2.0 * (n_atoms ** (1/3))
-    positions = (rng.random((n_atoms, 3)) - 0.5) * spread + box_size / 2
-    symbols = rng.choice(['C', 'H', 'O', 'N'], size=n_atoms)
-    atoms = Atoms(symbols=symbols, positions=positions, cell=[box_size]*3, pbc=True)
-    return atoms
-
-def generate_ethanol_system(target_n_atoms, density=1.0):
-    eth = molecule('CH3CH2OH')
-    n_atoms_per_mol = len(eth)
-    n_mols = int(np.ceil(target_n_atoms / n_atoms_per_mol))
-    vol = (n_mols * 46.07) / (0.6022 * density)
-    l = vol ** (1/3)
-    atoms = Atoms(cell=[l, l, l], pbc=True)
-    rng = np.random.default_rng(42)
-    for _ in range(n_mols):
-        mol = eth.copy()
-        mol.rotate(rng.random() * 360, 'x')
-        mol.rotate(rng.random() * 360, 'y')
-        mol.rotate(rng.random() * 360, 'z')
-        pos = rng.random(3) * l
-        mol.translate(pos)
-        atoms += mol
-    return atoms
-
-if "{n_atoms_type}" == "isolated":
-    atoms = generate_random_molecule({n_atoms_val})
-elif "{n_atoms_type}" == "ethanol":
-    atoms = generate_ethanol_system({n_atoms_val})
-
+atoms = read("{filepath}")
 pos = atoms.get_positions()
-h_T = atoms.get_cell()[:].T.tolist()
+
+# Determine if we have a valid cell
+cell_obj = None
+if not np.all(atoms.get_cell() == 0):
+    h_T = atoms.get_cell()[:].T.tolist()
+    cell_obj = neighborlist_rs.PyCell(h_T)
 
 times = []
 for _ in range({N_REPEAT}):
-    cell = neighborlist_rs.PyCell(h_T)
     start = time.perf_counter()
-    neighborlist_rs.build_neighborlists(cell, pos, {cutoff}, parallel=True)
+    neighborlist_rs.build_neighborlists(cell_obj, pos, {cutoff}, parallel={use_parallel})
     end = time.perf_counter()
     times.append(end - start)
 print(np.mean(times))
@@ -109,23 +53,26 @@ print(np.mean(times))
 
 def run_benchmarks():
     # Define system configurations
-    # (Display Name, Type, N_Atoms)
+    # (Display Name, Filepath)
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
     configs = [
-        ("100 (non-PBC)", "isolated", 100),
-        ("1,000 (non-PBC)", "isolated", 1000),
-        ("10,000 (non-PBC)", "isolated", 10000),
-        ("20,000 (non-PBC)", "isolated", 20000),
-        ("1,000 (Ethanol PBC)", "ethanol", 1000),
-        ("10,000 (Ethanol PBC)", "ethanol", 10000),
-        ("20,000 (Ethanol PBC)", "ethanol", 20000),
+        ("100 (non-PBC)", os.path.join(data_dir, "isolated_100.xyz")),
+        ("1,000 (non-PBC)", os.path.join(data_dir, "isolated_1000.xyz")),
+        ("10,000 (non-PBC)", os.path.join(data_dir, "isolated_10000.xyz")),
+        ("20,000 (non-PBC)", os.path.join(data_dir, "isolated_20000.xyz")),
+        ("1,000 (Ethanol PBC)", os.path.join(data_dir, "ethanol_1000.xyz")),
+        ("10,000 (Ethanol PBC)", os.path.join(data_dir, "ethanol_10000.xyz")),
+        ("20,000 (Ethanol PBC)", os.path.join(data_dir, "ethanol_20000.xyz")),
+        ("Si Bulk (PBC)", os.path.join(data_dir, "si_bulk.xyz")),
     ]
     
-    # Pre-generate atoms for non-RS libraries
+    # Pre-load atoms for non-RS libraries
     systems_data = []
-    for name, dtype, val in configs:
-        if dtype == "isolated": atoms = generate_random_molecule(val)
-        elif dtype == "ethanol": atoms = generate_ethanol_system(val)
-        systems_data.append((name, dtype, val, atoms))
+    for name, filepath in configs:
+        atoms = read(filepath)
+        # Note: We rely on the worker to handle the 'None' cell logic for timing.
+        # For correctness check below, we need to handle it here too.
+        systems_data.append((name, filepath, atoms))
 
     for cutoff in CUTOFFS:
         print(f"\n{'='*80}")
@@ -134,44 +81,73 @@ def run_benchmarks():
         print(f"{'System':<30} | {'Lib':<15} | {'Threads':<5} | {'Time (ms)':<10}")
         print("-" * 80)
         
-        for name, dtype, val, atoms in systems_data:
+        for name, filepath, atoms in systems_data:
             # --- Correctness Check ---
             # Using neighborlist-rs (20 CPU) vs Vesin
             pos = atoms.get_positions()
             box = atoms.get_cell()[:]
-            calc_vesin = vesin.NeighborList(cutoff=cutoff, full_list=False)
-            i_v, j_v, _ = calc_vesin.compute(pos, box, periodic=True, quantities="ijS")
             
-            h_T = box.T.tolist()
-            cell_rs = neighborlist_rs.PyCell(h_T)
+            # Vesin needs a box. If isolated, we must give it one or set periodic=False.
+            if np.all(box == 0):
+                # Dynamically compute bounding box for Vesin (mirroring Rust logic)
+                # Rust uses: span + 2 * (cutoff + 1.0)
+                min_bound = np.min(pos, axis=0)
+                max_bound = np.max(pos, axis=0)
+                span = max_bound - min_bound
+                margin = cutoff + 1.0
+                L = span + 2.0 * margin
+                box = np.diag(L)
+                periodic = False # Explicitly tell Vesin it's non-PBC
+            else:
+                periodic = True
+
+            calc_vesin = vesin.NeighborList(cutoff=cutoff, full_list=False)
+            i_v, j_v, _ = calc_vesin.compute(pos, box, periodic=periodic, quantities="ijS")
+            
+            # neighborlist-rs setup
+            if np.all(atoms.get_cell() == 0):
+                cell_rs = None
+            else:
+                h_T = atoms.get_cell()[:].T.tolist()
+                cell_rs = neighborlist_rs.PyCell(h_T)
+
+            # Use parallel=True for correctness check (default behavior)
             res_rs = neighborlist_rs.build_neighborlists(cell_rs, pos, cutoff, parallel=True)
             i_rs, j_rs = res_rs["local"]["edge_i"], res_rs["local"]["edge_j"]
             
-            p_v = set((min(u, v), max(u, v)) for u, v in zip(i_v, j_v))
+            # Filter out self-interactions from Vesin to match neighborlist-rs behavior
+            p_v = set((min(u, v), max(u, v)) for u, v in zip(i_v, j_v) if u != v)
             p_rs = set((min(u, v), max(u, v)) for u, v in zip(i_rs, j_rs))
             
+            # Count total edges (excluding self-loops for consistency with p_v/p_rs logic if needed, 
+            # but usually total edges is what matters for performance/correctness of MD)
+            # Vesin i_v includes self-loops if periodic=True and we didn't filter them from the list itself, just the set.
+            # Let's count filtered edges to be strictly comparable
+            edges_v = sum(1 for u, v in zip(i_v, j_v) if u != v)
+            edges_rs = len(i_rs) # RS already excludes self-loops
+
             if p_v != p_rs:
-                print(f"ERROR: Mismatch for {name} (Cutoff {cutoff})! V:{len(p_v)} RS:{len(p_rs)}")
+                print(f"ERROR: Mismatch for {name} (Cutoff {cutoff})! Unique Pairs V:{len(p_v)} RS:{len(p_rs)}")
             else:
-                print(f"Correctness: PASSED for {name} (Cutoff {cutoff})")
+                print(f"Correctness: PASSED for {name} (Cutoff {cutoff}) - Unique Pairs V:{len(p_v)} RS:{len(p_rs)} | Total Edges V:{edges_v} RS:{edges_rs}")
             
             # Vesin Benchmark
             t_v = []
             for _ in range(N_REPEAT):
                 calculator = vesin.NeighborList(cutoff=cutoff, full_list=False)
                 start = time.perf_counter()
-                calculator.compute(atoms.get_positions(), atoms.get_cell()[:], periodic=True)
+                calculator.compute(pos, box, periodic=periodic)
                 end = time.perf_counter()
                 t_v.append(end - start)
             print(f"{name:<30} | {'Vesin':<15} | {'Auto':<5} | {np.mean(t_v)*1000:<10.2f}")
             
             # neighborlist-rs (1 CPU)
-            t1 = benchmark_neighborlist_rs_worker(dtype, val, cutoff, 1)
+            t1 = benchmark_neighborlist_rs_worker(filepath, cutoff, 1)
             print(f"{name:<30} | {'neighborlist-rs':<15} | {'1':<5} | {t1*1000:<10.2f}")
             
-            # neighborlist-rs (20 CPUs)
+            # neighborlist-rs (Max CPUs)
             n_cpus = min(8, psutil.cpu_count(logical=True))
-            t20 = benchmark_neighborlist_rs_worker(dtype, val, cutoff, n_cpus)
+            t20 = benchmark_neighborlist_rs_worker(filepath, cutoff, n_cpus)
             print(f"{name:<30} | {'neighborlist-rs':<15} | {n_cpus:<5} | {t20*1000:<10.2f}")
             print("-" * 80)
 

@@ -7,6 +7,7 @@ pub enum CellError {
     NotInvertible,
 }
 
+#[derive(Clone, Debug)]
 pub struct Cell {
     h: Matrix3<f64>,
     h_inv: Matrix3<f64>,

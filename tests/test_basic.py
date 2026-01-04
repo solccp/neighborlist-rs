@@ -136,24 +136,24 @@ def test_build_neighborlists_multi():
     cutoffs = [2.0, 5.0]
     result = neighborlist_rs.build_neighborlists_multi(cell, positions, cutoffs)
     
-    assert 2.0 in result
-    assert 5.0 in result
+    assert 0 in result
+    assert 1 in result
     
-    # Cutoff 2.0: only (0, 1)
-    res2 = result[2.0]["local"]
+    # Cutoff 2.0 (index 0): only (0, 1)
+    res2 = result[0]["local"]
     assert len(res2["edge_i"]) == 1
     assert res2["edge_i"][0] == 0
     assert res2["edge_j"][0] == 1
     
-    # Cutoff 5.0: (0, 1) and (0, 2) and (1, 2)
+    # Cutoff 5.0 (index 1): (0, 1) and (0, 2) and (1, 2)
     # (1, 2) distance is 3.0
-    res5 = result[5.0]["local"]
+    res5 = result[1]["local"]
     assert len(res5["edge_i"]) == 3
     
     # Verify correctness against single calls
-    for r in cutoffs:
+    for i, r in enumerate(cutoffs):
         single = neighborlist_rs.build_neighborlists(cell, positions, r)["local"]
-        multi = result[r]["local"]
+        multi = result[i]["local"]
         
         # Sort for comparison
         si, sj = single["edge_i"], single["edge_j"]

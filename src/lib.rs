@@ -8,6 +8,8 @@ const BRUTE_FORCE_THRESHOLD: usize = 500;
 const PARALLEL_THRESHOLD: usize = 20;
 const AUTO_BOX_MARGIN: f64 = 1.0;
 
+type NeighborListResult = (Vec<i64>, Vec<i64>, Vec<i32>);
+
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -15,7 +17,7 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 use crate::cell::Cell;
 use crate::search::CellList;
 use nalgebra::{Matrix3, Vector3};
-use numpy::{ndarray, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
+use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ndarray};
 use pyo3::types::PyDict;
 use tracing_subscriber::EnvFilter;
 
@@ -72,12 +74,24 @@ fn build_neighborlists<'py>(
     for row in pos_view.rows() {
         let p = Vector3::new(row[0], row[1], row[2]);
         if cell.is_none() {
-            if p.x < min_bound.x { min_bound.x = p.x; }
-            if p.y < min_bound.y { min_bound.y = p.y; }
-            if p.z < min_bound.z { min_bound.z = p.z; }
-            if p.x > max_bound.x { max_bound.x = p.x; }
-            if p.y > max_bound.y { max_bound.y = p.y; }
-            if p.z > max_bound.z { max_bound.z = p.z; }
+            if p.x < min_bound.x {
+                min_bound.x = p.x;
+            }
+            if p.y < min_bound.y {
+                min_bound.y = p.y;
+            }
+            if p.z < min_bound.z {
+                min_bound.z = p.z;
+            }
+            if p.x > max_bound.x {
+                max_bound.x = p.x;
+            }
+            if p.y > max_bound.y {
+                max_bound.y = p.y;
+            }
+            if p.z > max_bound.z {
+                max_bound.z = p.z;
+            }
         }
         pos_vec.push(p);
     }
@@ -91,12 +105,8 @@ fn build_neighborlists<'py>(
         let lx = span.x + 2.0 * margin;
         let ly = span.y + 2.0 * margin;
         let lz = span.z + 2.0 * margin;
-        
-        let h_mat = Matrix3::new(
-            lx, 0.0, 0.0,
-            0.0, ly, 0.0,
-            0.0, 0.0, lz,
-        );
+
+        let h_mat = Matrix3::new(lx, 0.0, 0.0, 0.0, ly, 0.0, 0.0, 0.0, lz);
         Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
     };
 
@@ -143,14 +153,91 @@ fn build_neighborlists<'py>(
     Ok(dict)
 }
 
+fn extract_ase_data<'py>(
+    atoms: &Bound<'py, PyAny>,
+) -> PyResult<(PyReadonlyArray2<'py, f64>, Option<PyCell>)> {
+    // 1. Extract positions
+    let pos_obj = atoms.call_method0("get_positions")?;
+    let positions: PyReadonlyArray2<f64> = pos_obj.extract()?;
+
+    // 2. Extract PBC
+    let pbc_obj = atoms.call_method0("get_pbc")?;
+    let pbc: Vec<bool> = pbc_obj.extract()?;
+    if pbc.len() != 3 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "PBC must be length 3",
+        ));
+    }
+
+    // 3. Extract Cell
+    let cell_obj = atoms.call_method0("get_cell")?;
+    let cell_array_obj = cell_obj.call_method0("__array__")?;
+    let cell_array: PyReadonlyArray2<f64> = cell_array_obj.extract()?;
+
+    // 4. Handle PBC logic
+    let all_periodic = pbc.iter().all(|&x| x);
+    let none_periodic = pbc.iter().all(|&x| !x);
+
+    let py_cell = if all_periodic {
+        let c = cell_array.as_array();
+        if c.shape() != [3, 3] {
+            return Err(pyo3::exceptions::PyValueError::new_err("Cell must be 3x3"));
+        }
+        // Transpose ASE (row-major) to internal (column-major)
+        let h_mat = Matrix3::new(
+            c[[0, 0]],
+            c[[1, 0]],
+            c[[2, 0]],
+            c[[0, 1]],
+            c[[1, 1]],
+            c[[2, 1]],
+            c[[0, 2]],
+            c[[1, 2]],
+            c[[2, 2]],
+        );
+        let inner =
+            Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Some(PyCell { inner })
+    } else if none_periodic {
+        None
+    } else {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Mixed PBC (e.g., [True, True, False]) is not currently supported. Only all-True or all-False is supported.",
+        ));
+    };
+
+    Ok((positions, py_cell))
+}
+
 #[pyfunction]
-#[pyo3(signature = (cell, positions, cutoffs, parallel=true))]
+#[pyo3(signature = (atoms, cutoff))]
+fn build_from_ase<'py>(
+    py: Python<'py>,
+    atoms: &Bound<'py, PyAny>,
+    cutoff: f64,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (positions, py_cell) = extract_ase_data(atoms)?;
+    build_neighborlists(py, py_cell.as_ref(), positions, cutoff, true)
+}
+
+#[pyfunction]
+#[pyo3(signature = (atoms, cutoffs))]
+fn build_multi_from_ase<'py>(
+    py: Python<'py>,
+    atoms: &Bound<'py, PyAny>,
+    cutoffs: Vec<f64>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (positions, py_cell) = extract_ase_data(atoms)?;
+    build_neighborlists_multi(py, py_cell.as_ref(), positions, cutoffs)
+}
+
+#[pyfunction]
+#[pyo3(signature = (cell, positions, cutoffs))]
 fn build_neighborlists_multi<'py>(
     py: Python<'py>,
     cell: Option<&PyCell>,
     positions: PyReadonlyArray2<'_, f64>,
     cutoffs: Vec<f64>,
-    parallel: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let pos_view = positions.as_array();
     let n_atoms = pos_view.shape()[0];
@@ -170,17 +257,29 @@ fn build_neighborlists_multi<'py>(
     for row in pos_view.rows() {
         let p = Vector3::new(row[0], row[1], row[2]);
         if cell.is_none() {
-            if p.x < min_bound.x { min_bound.x = p.x; }
-            if p.y < min_bound.y { min_bound.y = p.y; }
-            if p.z < min_bound.z { min_bound.z = p.z; }
-            if p.x > max_bound.x { max_bound.x = p.x; }
-            if p.y > max_bound.y { max_bound.y = p.y; }
-            if p.z > max_bound.z { max_bound.z = p.z; }
+            if p.x < min_bound.x {
+                min_bound.x = p.x;
+            }
+            if p.y < min_bound.y {
+                min_bound.y = p.y;
+            }
+            if p.z < min_bound.z {
+                min_bound.z = p.z;
+            }
+            if p.x > max_bound.x {
+                max_bound.x = p.x;
+            }
+            if p.y > max_bound.y {
+                max_bound.y = p.y;
+            }
+            if p.z > max_bound.z {
+                max_bound.z = p.z;
+            }
         }
         pos_vec.push(p);
     }
 
-    let max_cutoff = cutoffs.iter().cloned().fold(0./0., f64::max);
+    let max_cutoff = cutoffs.iter().cloned().fold(f64::NAN, f64::max);
 
     let cell_inner = if let Some(c) = cell {
         c.inner.clone()
@@ -191,12 +290,8 @@ fn build_neighborlists_multi<'py>(
         let lx = span.x + 2.0 * margin;
         let ly = span.y + 2.0 * margin;
         let lz = span.z + 2.0 * margin;
-        
-        let h_mat = Matrix3::new(
-            lx, 0.0, 0.0,
-            0.0, ly, 0.0,
-            0.0, 0.0, lz,
-        );
+
+        let h_mat = Matrix3::new(lx, 0.0, 0.0, 0.0, ly, 0.0, 0.0, 0.0, lz);
         Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
     };
 
@@ -208,34 +303,23 @@ fn build_neighborlists_multi<'py>(
         search::brute_force_search_multi(&cell_inner, &pos_vec, &cutoffs)
     } else {
         let cl = CellList::build(&cell_inner, &pos_vec, max_cutoff);
-
-        // For now, using parallel search even for serial cases if forced by unsafe MIC on small systems,
-        // because we haven't implemented serial search_multi yet. 
-        // Ideally we should have a serial fallback for n_atoms < PARALLEL_THRESHOLD.
-        // However, par_search_multi overhead on 20 atoms is likely acceptable compared to no implementation.
-        // (Benchmark showed 2x slowdown for N=10, 1.5x speedup for N=20).
-        if parallel && n_atoms >= PARALLEL_THRESHOLD {
-            cl.par_search_multi(&cell_inner, &cutoffs)
-        } else {
-             cl.par_search_multi(&cell_inner, &cutoffs)
-        }
+        cl.par_search_multi(&cell_inner, &cutoffs)
     };
 
     let result_dict = PyDict::new(py);
     for (k, (edge_i, edge_j, shifts)) in results.into_iter().enumerate() {
-        let cutoff = cutoffs[k];
         let cutoff_entry = PyDict::new(py);
         let local = PyDict::new(py);
         let n_edges = edge_i.len();
-        
+
         local.set_item("edge_i", numpy::PyArray1::from_vec(py, edge_i))?;
         local.set_item("edge_j", numpy::PyArray1::from_vec(py, edge_j))?;
-        
+
         let shifts_arr = numpy::PyArray1::from_vec(py, shifts).reshape((n_edges, 3))?;
         local.set_item("shift", shifts_arr)?;
-        
+
         cutoff_entry.set_item("local", local)?;
-        result_dict.set_item(cutoff, cutoff_entry)?;
+        result_dict.set_item(k, cutoff_entry)?;
     }
 
     Ok(result_dict)
@@ -258,7 +342,7 @@ fn build_neighborlists_batch<'py>(
     let pos_view = positions.as_array();
     let batch_view = batch.as_array();
     let n_total = pos_view.shape()[0];
-    
+
     if batch_view.len() != n_total {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "positions and batch must have the same length",
@@ -270,7 +354,10 @@ fn build_neighborlists_batch<'py>(
         let local = PyDict::new(py);
         local.set_item("edge_i", numpy::PyArray1::from_vec(py, vec![0i64; 0]))?;
         local.set_item("edge_j", numpy::PyArray1::from_vec(py, vec![0i64; 0]))?;
-        local.set_item("shift", numpy::PyArray1::from_vec(py, vec![0i32; 0]).reshape((0, 3))?)?;
+        local.set_item(
+            "shift",
+            numpy::PyArray1::from_vec(py, vec![0i32; 0]).reshape((0, 3))?,
+        )?;
         dict.set_item("local", local)?;
         return Ok(dict);
     }
@@ -279,7 +366,7 @@ fn build_neighborlists_batch<'py>(
     let mut system_indices = Vec::new();
     let mut current_start = 0;
     let mut current_batch_val = batch_view[0];
-    
+
     for i in 1..n_total {
         if batch_view[i] != current_batch_val {
             system_indices.push((current_start, i, current_batch_val));
@@ -294,9 +381,11 @@ fn build_neighborlists_batch<'py>(
     let cell_matrices = if let Some(ref c) = cells {
         let cv = c.as_array();
         if cv.shape()[0] < n_systems {
-             return Err(pyo3::exceptions::PyValueError::new_err(
-                format!("Expected at least {} cells, but got {}", n_systems, cv.shape()[0]),
-            ));
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Expected at least {} cells, but got {}",
+                n_systems,
+                cv.shape()[0]
+            )));
         }
         let mut mats = Vec::with_capacity(n_systems);
         for i in 0..n_systems {
@@ -305,9 +394,15 @@ fn build_neighborlists_batch<'py>(
                 mats.push(None);
             } else {
                 mats.push(Some(Matrix3::new(
-                    m[[0, 0]], m[[0, 1]], m[[0, 2]],
-                    m[[1, 0]], m[[1, 1]], m[[1, 2]],
-                    m[[2, 0]], m[[2, 1]], m[[2, 2]],
+                    m[[0, 0]],
+                    m[[0, 1]],
+                    m[[0, 2]],
+                    m[[1, 0]],
+                    m[[1, 1]],
+                    m[[1, 2]],
+                    m[[2, 0]],
+                    m[[2, 1]],
+                    m[[2, 2]],
                 )));
             }
         }
@@ -318,7 +413,7 @@ fn build_neighborlists_batch<'py>(
 
     // 3. Parallel search over systems
     use rayon::prelude::*;
-    let results: Result<Vec<(Vec<i64>, Vec<i64>, Vec<i32>)>, String> = system_indices
+    let results: Result<Vec<NeighborListResult>, String> = system_indices
         .par_iter()
         .enumerate()
         .map(|(i, &(start, end, _batch_val))| {
@@ -326,17 +421,30 @@ fn build_neighborlists_batch<'py>(
             let n_atoms_local = end - start;
             let mut pos_vec = Vec::with_capacity(n_atoms_local);
             let mut min_bound = Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
-            let mut max_bound = Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+            let mut max_bound =
+                Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
 
             for row in pos_slice.rows() {
                 let p = Vector3::new(row[0], row[1], row[2]);
                 if cell_matrices[i].is_none() {
-                    if p.x < min_bound.x { min_bound.x = p.x; }
-                    if p.y < min_bound.y { min_bound.y = p.y; }
-                    if p.z < min_bound.z { min_bound.z = p.z; }
-                    if p.x > max_bound.x { max_bound.x = p.x; }
-                    if p.y > max_bound.y { max_bound.y = p.y; }
-                    if p.z > max_bound.z { max_bound.z = p.z; }
+                    if p.x < min_bound.x {
+                        min_bound.x = p.x;
+                    }
+                    if p.y < min_bound.y {
+                        min_bound.y = p.y;
+                    }
+                    if p.z < min_bound.z {
+                        min_bound.z = p.z;
+                    }
+                    if p.x > max_bound.x {
+                        max_bound.x = p.x;
+                    }
+                    if p.y > max_bound.y {
+                        max_bound.y = p.y;
+                    }
+                    if p.z > max_bound.z {
+                        max_bound.z = p.z;
+                    }
                 }
                 pos_vec.push(p);
             }
@@ -347,9 +455,15 @@ fn build_neighborlists_batch<'py>(
                 let margin = cutoff + AUTO_BOX_MARGIN;
                 let span = max_bound - min_bound;
                 let h_mat = Matrix3::new(
-                    span.x + 2.0 * margin, 0.0, 0.0,
-                    0.0, span.y + 2.0 * margin, 0.0,
-                    0.0, 0.0, span.z + 2.0 * margin,
+                    span.x + 2.0 * margin,
+                    0.0,
+                    0.0,
+                    0.0,
+                    span.y + 2.0 * margin,
+                    0.0,
+                    0.0,
+                    0.0,
+                    span.z + 2.0 * margin,
                 );
                 Cell::new(h_mat).map_err(|e| e.to_string())?
             };
@@ -379,16 +493,16 @@ fn build_neighborlists_batch<'py>(
                     (ei, ej, s)
                 }
             };
-            
+
             let offset = start as i64;
             let ei_global = ei.into_iter().map(|idx| idx + offset).collect();
             let ej_global = ej.into_iter().map(|idx| idx + offset).collect();
-            
+
             Ok((ei_global, ej_global, s))
         })
         .collect();
 
-    let results = results.map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let results = results.map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     let total_edges = results.iter().map(|r| r.0.len()).sum();
     let mut final_edge_i = Vec::with_capacity(total_edges);
@@ -405,25 +519,27 @@ fn build_neighborlists_batch<'py>(
     let local = PyDict::new(py);
     local.set_item("edge_i", numpy::PyArray1::from_vec(py, final_edge_i))?;
     local.set_item("edge_j", numpy::PyArray1::from_vec(py, final_edge_j))?;
-    local.set_item("shift", numpy::PyArray1::from_vec(py, final_shift).reshape((total_edges, 3))?)?;
+    local.set_item(
+        "shift",
+        numpy::PyArray1::from_vec(py, final_shift).reshape((total_edges, 3))?,
+    )?;
     dict.set_item("local", local)?;
     Ok(dict)
 }
 
 #[pyfunction]
-#[pyo3(signature = (positions, batch, cells=None, cutoffs=vec![5.0], parallel=true))]
+#[pyo3(signature = (positions, batch, cells=None, cutoffs=vec![5.0]))]
 fn build_neighborlists_batch_multi<'py>(
     py: Python<'py>,
     positions: PyReadonlyArray2<'_, f64>,
     batch: PyReadonlyArray1<'_, i32>,
     cells: Option<PyReadonlyArray3<'_, f64>>,
     cutoffs: Vec<f64>,
-    parallel: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let pos_view = positions.as_array();
     let batch_view = batch.as_array();
     let n_total = pos_view.shape()[0];
-    
+
     if batch_view.len() != n_total {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "positions and batch must have the same length",
@@ -438,7 +554,7 @@ fn build_neighborlists_batch_multi<'py>(
     let mut system_indices = Vec::new();
     let mut current_start = 0;
     let mut current_batch_val = batch_view[0];
-    
+
     for i in 1..n_total {
         if batch_view[i] != current_batch_val {
             system_indices.push((current_start, i, current_batch_val));
@@ -453,9 +569,11 @@ fn build_neighborlists_batch_multi<'py>(
     let cell_matrices = if let Some(ref c) = cells {
         let cv = c.as_array();
         if cv.shape()[0] < n_systems {
-             return Err(pyo3::exceptions::PyValueError::new_err(
-                format!("Expected at least {} cells, but got {}", n_systems, cv.shape()[0]),
-            ));
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Expected at least {} cells, but got {}",
+                n_systems,
+                cv.shape()[0]
+            )));
         }
         let mut mats = Vec::with_capacity(n_systems);
         for i in 0..n_systems {
@@ -464,9 +582,15 @@ fn build_neighborlists_batch_multi<'py>(
                 mats.push(None);
             } else {
                 mats.push(Some(Matrix3::new(
-                    m[[0, 0]], m[[0, 1]], m[[0, 2]],
-                    m[[1, 0]], m[[1, 1]], m[[1, 2]],
-                    m[[2, 0]], m[[2, 1]], m[[2, 2]],
+                    m[[0, 0]],
+                    m[[0, 1]],
+                    m[[0, 2]],
+                    m[[1, 0]],
+                    m[[1, 1]],
+                    m[[1, 2]],
+                    m[[2, 0]],
+                    m[[2, 1]],
+                    m[[2, 2]],
                 )));
             }
         }
@@ -475,11 +599,11 @@ fn build_neighborlists_batch_multi<'py>(
         vec![None; n_systems]
     };
 
-    let max_cutoff = cutoffs.iter().cloned().fold(0./0., f64::max);
+    let max_cutoff = cutoffs.iter().cloned().fold(f64::NAN, f64::max);
 
     // 3. Parallel search over systems for multiple cutoffs
     use rayon::prelude::*;
-    let results: Result<Vec<Vec<(Vec<i64>, Vec<i64>, Vec<i32>)>>, String> = system_indices
+    let results: Result<Vec<Vec<NeighborListResult>>, String> = system_indices
         .par_iter()
         .enumerate()
         .map(|(i, &(start, end, _batch_val))| {
@@ -487,17 +611,30 @@ fn build_neighborlists_batch_multi<'py>(
             let n_atoms_local = end - start;
             let mut pos_vec = Vec::with_capacity(n_atoms_local);
             let mut min_bound = Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
-            let mut max_bound = Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+            let mut max_bound =
+                Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
 
             for row in pos_slice.rows() {
                 let p = Vector3::new(row[0], row[1], row[2]);
                 if cell_matrices[i].is_none() {
-                    if p.x < min_bound.x { min_bound.x = p.x; }
-                    if p.y < min_bound.y { min_bound.y = p.y; }
-                    if p.z < min_bound.z { min_bound.z = p.z; }
-                    if p.x > max_bound.x { max_bound.x = p.x; }
-                    if p.y > max_bound.y { max_bound.y = p.y; }
-                    if p.z > max_bound.z { max_bound.z = p.z; }
+                    if p.x < min_bound.x {
+                        min_bound.x = p.x;
+                    }
+                    if p.y < min_bound.y {
+                        min_bound.y = p.y;
+                    }
+                    if p.z < min_bound.z {
+                        min_bound.z = p.z;
+                    }
+                    if p.x > max_bound.x {
+                        max_bound.x = p.x;
+                    }
+                    if p.y > max_bound.y {
+                        max_bound.y = p.y;
+                    }
+                    if p.z > max_bound.z {
+                        max_bound.z = p.z;
+                    }
                 }
                 pos_vec.push(p);
             }
@@ -508,9 +645,15 @@ fn build_neighborlists_batch_multi<'py>(
                 let margin = max_cutoff + AUTO_BOX_MARGIN;
                 let span = max_bound - min_bound;
                 let h_mat = Matrix3::new(
-                    span.x + 2.0 * margin, 0.0, 0.0,
-                    0.0, span.y + 2.0 * margin, 0.0,
-                    0.0, 0.0, span.z + 2.0 * margin,
+                    span.x + 2.0 * margin,
+                    0.0,
+                    0.0,
+                    0.0,
+                    span.y + 2.0 * margin,
+                    0.0,
+                    0.0,
+                    0.0,
+                    span.z + 2.0 * margin,
                 );
                 Cell::new(h_mat).map_err(|e| e.to_string())?
             };
@@ -525,28 +668,30 @@ fn build_neighborlists_batch_multi<'py>(
                 let cl = CellList::build(&cell_inner, &pos_vec, max_cutoff);
                 cl.par_search_multi(&cell_inner, &cutoffs)
             };
-            
+
             let offset = start as i64;
-            let offset_results = system_results.into_iter().map(|(ei, ej, s)| {
-                let ei_global = ei.into_iter().map(|idx| idx + offset).collect();
-                let ej_global = ej.into_iter().map(|idx| idx + offset).collect();
-                (ei_global, ej_global, s)
-            }).collect();
-            
+            let offset_results = system_results
+                .into_iter()
+                .map(|(ei, ej, s)| {
+                    let ei_global = ei.into_iter().map(|idx| idx + offset).collect();
+                    let ej_global = ej.into_iter().map(|idx| idx + offset).collect();
+                    (ei_global, ej_global, s)
+                })
+                .collect();
+
             Ok(offset_results)
         })
         .collect();
 
-    let results = results.map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let results = results.map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     // 4. Aggregation by cutoff
     let n_cutoffs = cutoffs.len();
     let result_dict = PyDict::new(py);
-    
+
     for k in 0..n_cutoffs {
-        let cutoff = cutoffs[k];
         let total_edges: usize = results.iter().map(|sys_res| sys_res[k].0.len()).sum();
-        
+
         let mut final_edge_i = Vec::with_capacity(total_edges);
         let mut final_edge_j = Vec::with_capacity(total_edges);
         let mut final_shift = Vec::with_capacity(total_edges * 3);
@@ -562,9 +707,12 @@ fn build_neighborlists_batch_multi<'py>(
         let local = PyDict::new(py);
         local.set_item("edge_i", numpy::PyArray1::from_vec(py, final_edge_i))?;
         local.set_item("edge_j", numpy::PyArray1::from_vec(py, final_edge_j))?;
-        local.set_item("shift", numpy::PyArray1::from_vec(py, final_shift).reshape((total_edges, 3))?)?;
+        local.set_item(
+            "shift",
+            numpy::PyArray1::from_vec(py, final_shift).reshape((total_edges, 3))?,
+        )?;
         cutoff_entry.set_item("local", local)?;
-        result_dict.set_item(cutoff, cutoff_entry)?;
+        result_dict.set_item(k, cutoff_entry)?;
     }
 
     Ok(result_dict)
@@ -603,6 +751,8 @@ fn init_logging(level: Option<String>) {
 fn neighborlist_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCell>()?;
     m.add_function(wrap_pyfunction!(build_neighborlists, m)?)?;
+    m.add_function(wrap_pyfunction!(build_from_ase, m)?)?;
+    m.add_function(wrap_pyfunction!(build_multi_from_ase, m)?)?;
     m.add_function(wrap_pyfunction!(build_neighborlists_multi, m)?)?;
     m.add_function(wrap_pyfunction!(build_neighborlists_batch, m)?)?;
     m.add_function(wrap_pyfunction!(build_neighborlists_batch_multi, m)?)?;

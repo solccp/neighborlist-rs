@@ -62,6 +62,32 @@ If you pass `None` as the cell, the library automatically infers a safe bounding
 result = neighborlist_rs.build_neighborlists(None, positions, cutoff=5.0)
 ```
 
+### ASE Integration
+Directly compute neighbor lists from an ASE `Atoms` object. This handles extracting positions, cell, and PBC flags automatically.
+
+#### Single Cutoff
+```python
+from ase.build import bulk
+import neighborlist_rs
+
+atoms = bulk("Cu", "fcc", a=3.6) * (3, 3, 3)
+
+# Automatically uses the cell if pbc=True, or infers box if pbc=False
+result = neighborlist_rs.build_from_ase(atoms, cutoff=5.0)
+edges = result["local"]
+```
+
+#### Multiple Cutoffs
+```python
+cutoffs = [5.0, 10.0]
+# Highly efficient single-pass search for multiple cutoffs
+results = neighborlist_rs.build_multi_from_ase(atoms, cutoffs)
+
+for i, rc in enumerate(cutoffs):
+    edges = results[i]["local"]
+    print(f"Cutoff {rc}: {len(edges['edge_i'])} pairs")
+```
+
 ### Multi-Cutoff Search
 Compute multiple neighbor lists (e.g., Short-range vs Electrostatics) in a **single pass**. This is much faster than calling the library multiple times.
 
@@ -69,9 +95,9 @@ Compute multiple neighbor lists (e.g., Short-range vs Electrostatics) in a **sin
 cutoffs = [6.0, 14.0, 20.0]
 results = neighborlist_rs.build_neighborlists_multi(cell, positions, cutoffs)
 
-# Access results by cutoff value
-for rc in cutoffs:
-    edges = results[rc]["local"]
+# Access results by index (order of cutoffs)
+for i, rc in enumerate(cutoffs):
+    edges = results[i]["local"]
     print(f"Cutoff {rc}A: {len(edges['edge_i'])} edges")
 ```
 
@@ -103,9 +129,9 @@ results = neighborlist_rs.build_neighborlists_batch_multi(
     positions, batch, cells=cells, cutoffs=cutoffs
 )
 
-# Returns: { 6.0: {"local": ...}, 14.0: {"local": ...} }
-mlp_edges = results[6.0]["local"]
-dispersion_edges = results[14.0]["local"]
+# Returns: { 0: {"local": ...}, 1: {"local": ...} }
+mlp_edges = results[0]["local"]
+dispersion_edges = results[1]["local"]
 ```
 
 *Note: In batched mode, if `cells[i]` is a zero-matrix, system `i` is treated as non-PBC with auto-box inference.*

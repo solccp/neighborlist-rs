@@ -19,17 +19,24 @@ High-performance neighborlist construction for atomistic systems in Rust with Py
 ## Directory Structure
 
 *   `src/`: Rust source code.
-    *   `lib.rs`: PyO3 module definition, Python interface logic, and entry points for batched/multi processing.
+    *   `lib.rs`: PyO3 module definition and Python API entry points.
+    *   `batch.rs`: Logic for processing batches of systems.
+    *   `single.rs`: Logic for processing single systems and auto-box inference.
     *   `search.rs`: Core cell-list algorithm, parallel kernels, and brute-force fallbacks.
     *   `cell.rs`: Unit cell handling, MIC logic, and Cartesian/Fractional transformations.
 *   `tests/`: Python integration tests.
     *   `test_basic.py`: Standard functional tests including multi-cutoff verification.
     *   `test_batch.py`: Rigorous tests for batched processing and mixed PBC/non-PBC batches.
 *   `benchmarks/`: Performance benchmarking suite.
-    *   `batch_bench.py`: Benchmarking batched processing speedups.
-    *   `comprehensive_benchmark.py`: Baseline comparisons against other libraries.
 *   `conductor/`: Project management, track plans, and technical specifications.
 *   `.cargo/config.toml`: Local compilation flags (e.g., `target-cpu=native`).
+
+## Test Coverage
+
+*   **Core Logic:** >95% coverage for `src/search.rs` and `src/cell.rs`.
+*   **Batch/Single Logic:** >85% coverage for `src/batch.rs` and `src/single.rs`.
+*   **Total Project:** ~70% total line coverage (including untested PyO3 boilerplate in `src/lib.rs`).
+*   **Validation:** All features are additionally validated via comprehensive Python integration tests (`pytest tests/`).
 
 ## Development Workflow
 

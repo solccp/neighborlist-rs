@@ -24,9 +24,8 @@ $$H = [\mathbf{a} | \mathbf{b} | \mathbf{c}] = \begin{bmatrix} a_x & b_x & c_x \
 *Note: This is the transpose of the convention used by ASE.*
 
 ### Result Schema
-All neighbor list results return a dictionary with a `"local"` key containing:
-- `edge_i`: `(M,)` uint64 array of source atom indices.
-- `edge_j`: `(M,)` uint64 array of target atom indices.
+All neighbor list results return a dictionary containing:
+- `edge_index`: `(2, M)` uint64 array of atom pairs.
 - `shift`: `(M, 3)` int32 array of periodic shifts.
 
 ### Reconstructing Vectors
@@ -50,8 +49,8 @@ cell = neighborlist_rs.PyCell([[10.0, 0, 0], [0, 10.0, 0], [0, 0, 10.0]])
 positions = np.random.rand(100, 3) * 10.0
 
 result = neighborlist_rs.build_neighborlists(cell, positions, cutoff=5.0)
-edges = result["local"]
-print(f"Found {len(edges['edge_i'])} pairs")
+edge_index = result["edge_index"]
+print(f"Found {edge_index.shape[1]} pairs")
 ```
 
 ### Isolated Systems (Non-PBC)
@@ -74,7 +73,7 @@ atoms = bulk("Cu", "fcc", a=3.6) * (3, 3, 3)
 
 # Automatically uses the cell if pbc=True, or infers box if pbc=False
 result = neighborlist_rs.build_from_ase(atoms, cutoff=5.0)
-edges = result["local"]
+edge_index = result["edge_index"]
 ```
 
 #### Multiple Cutoffs
@@ -147,7 +146,7 @@ batch_res = neighborlist_rs.build_neighborlists_batch(
     positions, batch, cells=cells, cutoff=5.0
 )
 
-all_edges = batch_res["local"]
+edge_index = batch_res["edge_index"]
 ```
 
 ### Multi-Cutoff Batched Search

@@ -9,6 +9,8 @@ const Z_ORDER_BITS: u32 = 21;
 const Z_ORDER_CLAMP_MAX: f64 = 0.999999;
 const PARALLEL_TASKS_PER_THREAD: usize = 64;
 
+pub type EdgeResult = (Vec<i64>, Vec<i64>, Vec<i32>);
+
 pub struct CellList {
     /// particles[sorted_idx] = original_idx
     particles: Vec<usize>,
@@ -191,7 +193,7 @@ impl CellList {
         neighbors
     }
 
-    pub fn par_search_optimized(&self, cell: &Cell, cutoff: f64) -> (Vec<i64>, Vec<i64>, Vec<i32>) {
+    pub fn par_search_optimized(&self, cell: &Cell, cutoff: f64) -> EdgeResult {
         let _span = info_span!("CellList::par_search_optimized").entered();
         let cutoff_sq = cutoff * cutoff;
         let n_atoms = self.particles.len();
@@ -252,7 +254,7 @@ impl CellList {
         cell: &Cell,
         cutoffs: &[f64],
         disjoint: bool,
-    ) -> Vec<(Vec<i64>, Vec<i64>, Vec<i32>)> {
+    ) -> Vec<EdgeResult> {
         let _span = info_span!("CellList::par_search_multi").entered();
         let n_atoms = self.particles.len();
         let n_cutoffs = cutoffs.len();
@@ -260,9 +262,12 @@ impl CellList {
         // Sort cutoffs to handle disjoint correctly and efficiently
         let mut sorted_indices: Vec<usize> = (0..n_cutoffs).collect();
         sorted_indices.sort_by(|&a, &b| cutoffs[a].partial_cmp(&cutoffs[b]).unwrap());
-        
-        let sorted_cutoffs_sq: Vec<f64> = sorted_indices.iter().map(|&i| cutoffs[i] * cutoffs[i]).collect();
-        let max_cutoff_sq = sorted_cutoffs_sq.iter().cloned().last().unwrap_or(0.0);
+
+        let sorted_cutoffs_sq: Vec<f64> = sorted_indices
+            .iter()
+            .map(|&i| cutoffs[i] * cutoffs[i])
+            .collect();
+        let max_cutoff_sq = sorted_cutoffs_sq.iter().cloned().next_back().unwrap_or(0.0);
 
         // 1. Count pass
         let num_threads = rayon::current_num_threads();
@@ -421,7 +426,7 @@ impl CellList {
         cell: &Cell,
         sorted_cutoffs_sq: &[f64],
         max_cutoff_sq: f64,
-        atom_offsets: &[usize], // offsets for this atom for each rank
+        atom_offsets: &[usize],         // offsets for this atom for each rank
         ptrs: &[(usize, usize, usize)], // global pointers for each rank
         disjoint: bool,
     ) {
@@ -510,7 +515,6 @@ impl CellList {
             }
         }
     }
-
 
     fn count_atom_neighbors(&self, i: usize, cell: &Cell, cutoff_sq: f64) -> usize {
         let pos_i_w = self.pos_wrapped[i];
@@ -730,7 +734,7 @@ pub fn brute_force_search_full(
     cell: &Cell,
     positions: &[Vector3<f64>],
     cutoff: f64,
-) -> (Vec<i64>, Vec<i64>, Vec<i32>) {
+) -> EdgeResult {
     let n = positions.len();
     let cutoff_sq = cutoff * cutoff;
     // Estimate capacity: avg 50 neighbors? for small system maybe less.
@@ -759,16 +763,19 @@ pub fn brute_force_search_multi(
     positions: &[Vector3<f64>],
     cutoffs: &[f64],
     disjoint: bool,
-) -> Vec<(Vec<i64>, Vec<i64>, Vec<i32>)> {
+) -> Vec<EdgeResult> {
     let n = positions.len();
     let n_cutoffs = cutoffs.len();
 
     // Sort cutoffs to handle disjoint correctly
     let mut sorted_indices: Vec<usize> = (0..n_cutoffs).collect();
     sorted_indices.sort_by(|&a, &b| cutoffs[a].partial_cmp(&cutoffs[b]).unwrap());
-    
-    let sorted_cutoffs_sq: Vec<f64> = sorted_indices.iter().map(|&i| cutoffs[i] * cutoffs[i]).collect();
-    let max_cutoff_sq = sorted_cutoffs_sq.iter().cloned().last().unwrap_or(0.0);
+
+    let sorted_cutoffs_sq: Vec<f64> = sorted_indices
+        .iter()
+        .map(|&i| cutoffs[i] * cutoffs[i])
+        .collect();
+    let max_cutoff_sq = sorted_cutoffs_sq.iter().cloned().next_back().unwrap_or(0.0);
 
     let capacity = n * BRUTE_FORCE_CAPACITY_FACTOR;
 
@@ -977,6 +984,142 @@ mod tests {
         let cutoff = 3.0;
         let cl = CellList::build(&cell, &positions, cutoff);
         let _ = cl.par_search_optimized(&cell, cutoff);
+    }
+
+    #[test]
+    fn test_par_search_optimized_consistency() {
+        let h = Matrix3::identity() * 10.0;
+        let cell = Cell::new(h).unwrap();
+
+        // Create enough atoms to trigger parallel threshold if we were using the python binding,
+        // but here we call it directly so it doesn't matter, but good for stress test.
+        let mut positions = Vec::new();
+        for i in 0..5 {
+            for j in 0..5 {
+                for k in 0..5 {
+                    positions.push(Vector3::new(i as f64, j as f64, k as f64));
+                }
+            }
+        }
+
+        let cutoff = 1.5;
+        let cl = CellList::build(&cell, &positions, cutoff);
+
+        // Serial reference
+        let mut serial_results: Vec<(usize, usize)> = cl
+            .search(&cell, &positions, cutoff)
+            .into_iter()
+            .map(|(i, j, _, _, _)| (i, j))
+            .collect();
+        serial_results.sort();
+
+        // Parallel
+        let (ei, ej, _) = cl.par_search_optimized(&cell, cutoff);
+        let mut par_results: Vec<(usize, usize)> = ei
+            .iter()
+            .zip(ej.iter())
+            .map(|(&i, &j)| (i as usize, j as usize))
+            .collect();
+        par_results.sort();
+
+        assert_eq!(serial_results, par_results);
+    }
+
+    #[test]
+    fn test_par_search_multi_consistency() {
+        let h = Matrix3::identity() * 10.0;
+        let cell = Cell::new(h).unwrap();
+        let positions = vec![
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(1.2, 1.0, 1.0), // dist 0.2
+            Vector3::new(1.5, 1.0, 1.0), // dist 0.5 from 0, 0.3 from 1
+        ];
+
+        let cutoffs = vec![0.3, 0.6];
+        let cl = CellList::build(&cell, &positions, 0.6);
+
+        let results = cl.par_search_multi(&cell, &cutoffs, false);
+
+        // Verify it matches individual searches.
+        for (k, cutoff) in cutoffs.iter().enumerate() {
+            let (ei, ej, _) = &results[k];
+            let mut par_res: Vec<(usize, usize)> = ei
+                .iter()
+                .zip(ej.iter())
+                .map(|(&i, &j)| (i as usize, j as usize))
+                .collect();
+            par_res.sort();
+
+            let mut serial_res: Vec<(usize, usize)> = cl
+                .search(&cell, &positions, *cutoff)
+                .into_iter()
+                .map(|(i, j, _, _, _)| (i, j))
+                .collect();
+            serial_res.sort();
+
+            assert_eq!(par_res, serial_res, "Mismatch at cutoff {}", cutoff);
+        }
+    }
+
+    #[test]
+    fn test_brute_force_full_consistency() {
+        let h = Matrix3::identity() * 10.0;
+        let cell = Cell::new(h).unwrap();
+        let positions = vec![Vector3::new(1.0, 1.0, 1.0), Vector3::new(1.2, 1.0, 1.0)];
+        let cutoff = 0.5;
+
+        let (ei, ej, _) = brute_force_search_full(&cell, &positions, cutoff);
+        let mut bf_res: Vec<(usize, usize)> = ei
+            .iter()
+            .zip(ej.iter())
+            .map(|(&i, &j)| (i as usize, j as usize))
+            .collect();
+        bf_res.sort();
+
+        let cl = CellList::build(&cell, &positions, cutoff);
+        let mut cl_res: Vec<(usize, usize)> = cl
+            .search(&cell, &positions, cutoff)
+            .into_iter()
+            .map(|(i, j, _, _, _)| (i, j))
+            .collect();
+        cl_res.sort();
+
+        assert_eq!(bf_res, cl_res);
+    }
+
+    #[test]
+    fn test_brute_force_multi_consistency() {
+        let h = Matrix3::identity() * 10.0;
+        let cell = Cell::new(h).unwrap();
+        let positions = vec![
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(1.2, 1.0, 1.0),
+            Vector3::new(1.5, 1.0, 1.0),
+        ];
+
+        let cutoffs = vec![0.3, 0.6];
+        // Brute force multi
+        let results = brute_force_search_multi(&cell, &positions, &cutoffs, false);
+
+        for (k, cutoff) in cutoffs.iter().enumerate() {
+            let (ei, ej, _) = &results[k];
+            let mut bf_res: Vec<(usize, usize)> = ei
+                .iter()
+                .zip(ej.iter())
+                .map(|(&i, &j)| (i as usize, j as usize))
+                .collect();
+            bf_res.sort();
+
+            let cl = CellList::build(&cell, &positions, *cutoff);
+            let mut serial_res: Vec<(usize, usize)> = cl
+                .search(&cell, &positions, *cutoff)
+                .into_iter()
+                .map(|(i, j, _, _, _)| (i, j))
+                .collect();
+            serial_res.sort();
+
+            assert_eq!(bf_res, serial_res, "Mismatch at cutoff {}", cutoff);
+        }
     }
 
     #[cfg(test)]

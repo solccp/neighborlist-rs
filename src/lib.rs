@@ -241,6 +241,10 @@ fn build_neighborlists_multi<'py>(
     Ok(result_dict)
 }
 
+fn is_zero_matrix(m: &ndarray::ArrayView2<f64>) -> bool {
+    m.iter().all(|&x| x == 0.0)
+}
+
 #[pyfunction]
 #[pyo3(signature = (positions, batch, cells=None, cutoff=5.0, parallel=true))]
 fn build_neighborlists_batch<'py>(
@@ -271,7 +275,7 @@ fn build_neighborlists_batch<'py>(
         return Ok(dict);
     }
 
-    // 1. Determine system boundaries (assumes grouped by system)
+    // 1. Determine system boundaries
     let mut system_indices = Vec::new();
     let mut current_start = 0;
     let mut current_batch_val = batch_view[0];
@@ -297,11 +301,15 @@ fn build_neighborlists_batch<'py>(
         let mut mats = Vec::with_capacity(n_systems);
         for i in 0..n_systems {
             let m = cv.index_axis(ndarray::Axis(0), i);
-            mats.push(Some(Matrix3::new(
-                m[[0, 0]], m[[0, 1]], m[[0, 2]],
-                m[[1, 0]], m[[1, 1]], m[[1, 2]],
-                m[[2, 0]], m[[2, 1]], m[[2, 2]],
-            )));
+            if is_zero_matrix(&m) {
+                mats.push(None);
+            } else {
+                mats.push(Some(Matrix3::new(
+                    m[[0, 0]], m[[0, 1]], m[[0, 2]],
+                    m[[1, 0]], m[[1, 1]], m[[1, 2]],
+                    m[[2, 0]], m[[2, 1]], m[[2, 2]],
+                )));
+            }
         }
         mats
     } else {
@@ -372,7 +380,6 @@ fn build_neighborlists_batch<'py>(
                 }
             };
             
-            // Apply global offset to indices
             let offset = start as i64;
             let ei_global = ei.into_iter().map(|idx| idx + offset).collect();
             let ej_global = ej.into_iter().map(|idx| idx + offset).collect();
@@ -383,7 +390,6 @@ fn build_neighborlists_batch<'py>(
 
     let results = results.map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
 
-    // 4. Aggregation (Phase 3)
     let total_edges = results.iter().map(|r| r.0.len()).sum();
     let mut final_edge_i = Vec::with_capacity(total_edges);
     let mut final_edge_j = Vec::with_capacity(total_edges);
@@ -402,6 +408,166 @@ fn build_neighborlists_batch<'py>(
     local.set_item("shift", numpy::PyArray1::from_vec(py, final_shift).reshape((total_edges, 3))?)?;
     dict.set_item("local", local)?;
     Ok(dict)
+}
+
+#[pyfunction]
+#[pyo3(signature = (positions, batch, cells=None, cutoffs=vec![5.0], parallel=true))]
+fn build_neighborlists_batch_multi<'py>(
+    py: Python<'py>,
+    positions: PyReadonlyArray2<'_, f64>,
+    batch: PyReadonlyArray1<'_, i32>,
+    cells: Option<PyReadonlyArray3<'_, f64>>,
+    cutoffs: Vec<f64>,
+    parallel: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    let pos_view = positions.as_array();
+    let batch_view = batch.as_array();
+    let n_total = pos_view.shape()[0];
+    
+    if batch_view.len() != n_total {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "positions and batch must have the same length",
+        ));
+    }
+
+    if n_total == 0 || cutoffs.is_empty() {
+        return Ok(PyDict::new(py));
+    }
+
+    // 1. Determine system boundaries
+    let mut system_indices = Vec::new();
+    let mut current_start = 0;
+    let mut current_batch_val = batch_view[0];
+    
+    for i in 1..n_total {
+        if batch_view[i] != current_batch_val {
+            system_indices.push((current_start, i, current_batch_val));
+            current_start = i;
+            current_batch_val = batch_view[i];
+        }
+    }
+    system_indices.push((current_start, n_total, current_batch_val));
+    let n_systems = system_indices.len();
+
+    // 2. Extract cell matrices
+    let cell_matrices = if let Some(ref c) = cells {
+        let cv = c.as_array();
+        if cv.shape()[0] < n_systems {
+             return Err(pyo3::exceptions::PyValueError::new_err(
+                format!("Expected at least {} cells, but got {}", n_systems, cv.shape()[0]),
+            ));
+        }
+        let mut mats = Vec::with_capacity(n_systems);
+        for i in 0..n_systems {
+            let m = cv.index_axis(ndarray::Axis(0), i);
+            if is_zero_matrix(&m) {
+                mats.push(None);
+            } else {
+                mats.push(Some(Matrix3::new(
+                    m[[0, 0]], m[[0, 1]], m[[0, 2]],
+                    m[[1, 0]], m[[1, 1]], m[[1, 2]],
+                    m[[2, 0]], m[[2, 1]], m[[2, 2]],
+                )));
+            }
+        }
+        mats
+    } else {
+        vec![None; n_systems]
+    };
+
+    let max_cutoff = cutoffs.iter().cloned().fold(0./0., f64::max);
+
+    // 3. Parallel search over systems for multiple cutoffs
+    use rayon::prelude::*;
+    let results: Result<Vec<Vec<(Vec<i64>, Vec<i64>, Vec<i32>)>>, String> = system_indices
+        .par_iter()
+        .enumerate()
+        .map(|(i, &(start, end, _batch_val))| {
+            let pos_slice = pos_view.slice(ndarray::s![start..end, ..]);
+            let n_atoms_local = end - start;
+            let mut pos_vec = Vec::with_capacity(n_atoms_local);
+            let mut min_bound = Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+            let mut max_bound = Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+
+            for row in pos_slice.rows() {
+                let p = Vector3::new(row[0], row[1], row[2]);
+                if cell_matrices[i].is_none() {
+                    if p.x < min_bound.x { min_bound.x = p.x; }
+                    if p.y < min_bound.y { min_bound.y = p.y; }
+                    if p.z < min_bound.z { min_bound.z = p.z; }
+                    if p.x > max_bound.x { max_bound.x = p.x; }
+                    if p.y > max_bound.y { max_bound.y = p.y; }
+                    if p.z > max_bound.z { max_bound.z = p.z; }
+                }
+                pos_vec.push(p);
+            }
+
+            let cell_inner = if let Some(h_mat) = cell_matrices[i] {
+                Cell::new(h_mat).map_err(|e| e.to_string())?
+            } else {
+                let margin = max_cutoff + AUTO_BOX_MARGIN;
+                let span = max_bound - min_bound;
+                let h_mat = Matrix3::new(
+                    span.x + 2.0 * margin, 0.0, 0.0,
+                    0.0, span.y + 2.0 * margin, 0.0,
+                    0.0, 0.0, span.z + 2.0 * margin,
+                );
+                Cell::new(h_mat).map_err(|e| e.to_string())?
+            };
+
+            let perp = cell_inner.perpendicular_widths();
+            let min_width = perp.x.min(perp.y).min(perp.z);
+            let mic_safe = max_cutoff * 2.0 < min_width;
+
+            let system_results = if n_atoms_local < BRUTE_FORCE_THRESHOLD && mic_safe {
+                search::brute_force_search_multi(&cell_inner, &pos_vec, &cutoffs)
+            } else {
+                let cl = CellList::build(&cell_inner, &pos_vec, max_cutoff);
+                cl.par_search_multi(&cell_inner, &cutoffs)
+            };
+            
+            let offset = start as i64;
+            let offset_results = system_results.into_iter().map(|(ei, ej, s)| {
+                let ei_global = ei.into_iter().map(|idx| idx + offset).collect();
+                let ej_global = ej.into_iter().map(|idx| idx + offset).collect();
+                (ei_global, ej_global, s)
+            }).collect();
+            
+            Ok(offset_results)
+        })
+        .collect();
+
+    let results = results.map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+
+    // 4. Aggregation by cutoff
+    let n_cutoffs = cutoffs.len();
+    let result_dict = PyDict::new(py);
+    
+    for k in 0..n_cutoffs {
+        let cutoff = cutoffs[k];
+        let total_edges: usize = results.iter().map(|sys_res| sys_res[k].0.len()).sum();
+        
+        let mut final_edge_i = Vec::with_capacity(total_edges);
+        let mut final_edge_j = Vec::with_capacity(total_edges);
+        let mut final_shift = Vec::with_capacity(total_edges * 3);
+
+        for sys_res in &results {
+            let (ei, ej, s) = &sys_res[k];
+            final_edge_i.extend(ei.iter().cloned());
+            final_edge_j.extend(ej.iter().cloned());
+            final_shift.extend(s.iter().cloned());
+        }
+
+        let cutoff_entry = PyDict::new(py);
+        let local = PyDict::new(py);
+        local.set_item("edge_i", numpy::PyArray1::from_vec(py, final_edge_i))?;
+        local.set_item("edge_j", numpy::PyArray1::from_vec(py, final_edge_j))?;
+        local.set_item("shift", numpy::PyArray1::from_vec(py, final_shift).reshape((total_edges, 3))?)?;
+        cutoff_entry.set_item("local", local)?;
+        result_dict.set_item(cutoff, cutoff_entry)?;
+    }
+
+    Ok(result_dict)
 }
 
 #[pyfunction]
@@ -439,6 +605,7 @@ fn neighborlist_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_neighborlists, m)?)?;
     m.add_function(wrap_pyfunction!(build_neighborlists_multi, m)?)?;
     m.add_function(wrap_pyfunction!(build_neighborlists_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(build_neighborlists_batch_multi, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(set_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(init_logging, m)?)?;

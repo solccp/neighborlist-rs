@@ -32,5 +32,86 @@ def test_build_neighborlists_batch_basic():
     expected = [(0, 1), (2, 3), (2, 4), (3, 4)]
     assert pairs == expected
 
+def test_build_neighborlists_batch_multi():
+    # System 1: 2 atoms, dist 1.0
+    pos1 = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+    # System 2: 2 atoms, dist 3.0
+    pos2 = np.array([[10.0, 0.0, 0.0], [13.0, 0.0, 0.0]])
+    
+    positions = np.concatenate([pos1, pos2], axis=0)
+    batch = np.array([0, 0, 1, 1], dtype=np.int32)
+    
+    cutoffs = [2.0, 4.0]
+    
+    # This should fail initially
+    result = neighborlist_rs.build_neighborlists_batch_multi(positions, batch, cutoffs=cutoffs)
+    
+    assert 2.0 in result
+    assert 4.0 in result
+    
+    # 2.0A: Only system 1 pair (0, 1)
+    res2 = result[2.0]["local"]
+    assert len(res2["edge_i"]) == 1
+    assert res2["edge_i"][0] == 0
+    assert res2["edge_j"][0] == 1
+    
+    # 4.0A: System 1 pair (0, 1) and System 2 pair (2, 3)
+    res4 = result[4.0]["local"]
+    assert len(res4["edge_i"]) == 2
+    pairs4 = sorted(zip(res4["edge_i"], res4["edge_j"]))
+    assert pairs4 == [(0, 1), (2, 3)]
+
+def test_build_neighborlists_batch_multi_pbc():
+    from ase.build import bulk
+    # System 1: Si Bulk (8 atoms)
+    atoms1 = bulk('Si', 'diamond', a=5.43, cubic=True)
+    pos1 = atoms1.get_positions()
+    cell1 = atoms1.get_cell()[:].T
+    
+    # System 2: 2 atoms, dist 1.0 (non-PBC)
+    pos2 = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+    
+    positions = np.concatenate([pos1, pos2], axis=0)
+    batch = np.array([0]*len(pos1) + [1]*len(pos2), dtype=np.int32)
+    
+    # Cells: (2, 3, 3)
+    # Note: neighborlist-rs PyCell takes transposed ase cell (column major)
+    # But build_neighborlists_batch takes the 3x3 as-is from numpy if we matched single call.
+    # Actually PyCell code: h[0][0], h[0][1]... so it expects row-major input which it converts to Matrix3.
+    # Our batch extraction logic: m[[0,0]], m[[0,1]]... also row-major.
+    cells = np.zeros((2, 3, 3))
+    cells[0] = atoms1.get_cell()[:] # ase cell is row-major [[ax, ay, az], [bx...]]
+    cells[1] = np.zeros((3, 3)) # non-PBC
+    
+    cutoffs = [2.5, 6.0]
+    
+    result = neighborlist_rs.build_neighborlists_batch_multi(positions, batch, cells=cells, cutoffs=cutoffs)
+    
+    # Verify against single calls
+    for r in cutoffs:
+        # System 1 single
+        res1 = neighborlist_rs.build_neighborlists(neighborlist_rs.PyCell(cells[0].T.tolist()), pos1, r)["local"]
+        # System 2 single
+        res2 = neighborlist_rs.build_neighborlists(None, pos2, r)["local"]
+        
+        # Combine manually
+        expected_i = np.concatenate([res1["edge_i"], res2["edge_i"] + len(pos1)])
+        expected_j = np.concatenate([res1["edge_j"], res2["edge_j"] + len(pos1)])
+        
+        # RS result
+        actual_i = result[r]["local"]["edge_i"]
+        actual_j = result[r]["local"]["edge_j"]
+        
+        # Compare unique pairs
+        p_exp = set((min(u, v), max(u, v)) for u, v in zip(expected_i, expected_j))
+        p_act = set((min(u, v), max(u, v)) for u, v in zip(actual_i, actual_j))
+        
+        assert p_exp == p_act, f"Mismatch for cutoff {r}"
+        assert len(expected_i) == len(actual_i)
+
 if __name__ == "__main__":
     test_build_neighborlists_batch_basic()
+    test_build_neighborlists_batch_multi()
+    test_build_neighborlists_batch_multi_pbc()
+    print("All batch tests passed!")
+

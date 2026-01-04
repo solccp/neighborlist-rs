@@ -1,10 +1,10 @@
 # Track Plan: Holistic Codebase Optimization and Large-Scale Refactor
 
-## Phase 1: Profiling & Baseline
+## Phase 1: Profiling & Baseline [checkpoint: 20c916c]
 - [x] Task: Instrument code with `tracing` or `perf` hooks to measure bin-search vs overhead 2bfddf0
 - [x] Task: Implement a detailed memory profiler (e.g., using `dhat` or `heaptrack` in tests) 0c1a379
 - [x] Task: Establish 10k/20k atom baseline benchmarks in a dedicated benchmark folder c7f4815
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Profiling & Baseline' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Profiling & Baseline' (Protocol in workflow.md) 20c916c
 
 ## Phase 2: Spatial Sorting (Cache Locality)
 - [ ] Task: Implement Z-order (Morton) index calculation for atom positions

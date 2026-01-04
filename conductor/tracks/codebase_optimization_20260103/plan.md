@@ -13,11 +13,11 @@
 - [x] Task: Verify cache hit rate improvement using `perf stat` or equivalent 49bcfcf
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Spatial Sorting (Cache Locality)' (Protocol in workflow.md) bf687dd
 
-## Phase 3: Buffer Management & Allocation Optimization [checkpoint: ee573cf]
+## Phase 3: Buffer Management & Allocation Optimization [checkpoint: 77c2ad0]
 - [x] Task: Refactor `par_search_optimized` to use a more compact storage for intermediate neighbor counts cbbb8ca
 - [x] Task: Explore using `smallvec` or in-place sorting to reduce peak heap usage during the "Fill" pass ee573cf
 - [x] Task: Minimize Python/Rust conversion overhead by optimizing the dictionary construction in `lib.rs` ee573cf
-- [~] Task: Conductor - User Manual Verification 'Phase 3: Buffer Management & Allocation Optimization' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Buffer Management & Allocation Optimization' (Protocol in workflow.md) 77c2ad0
 
 ## Phase 4: Parallelization Tuning [checkpoint: 1e3ec00]
 - [x] Task: Implement adaptive chunk sizing for Rayon based on system size and CPU count 3d56f66

@@ -13,6 +13,8 @@
 
 ## Mathematical Libraries
 - **nalgebra:** For efficient 3x3 matrix operations (cell matrices) and 3D vector math (Cartesian/fractional conversions).
+- **bytemuck:** For safe zero-copy casting between numeric types and SIMD vectors.
+- **wide:** For explicit SIMD kernels to accelerate the inner loops of the neighbor search.
 
 ## Testing Frameworks
 - **Built-in Rust Test Runner:** For unit and integration testing.

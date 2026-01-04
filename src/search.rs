@@ -198,52 +198,30 @@ impl CellList {
         let cutoff_sq = cutoff * cutoff;
         let n_atoms = self.particles.len();
 
-        // Adaptive chunk sizing for better load balancing.
-        // Aim for at least 64 tasks per thread to allow work-stealing to be effective
-        // without creating too much overhead for small systems.
         let num_threads = rayon::current_num_threads();
         let min_len = (n_atoms / (num_threads * PARALLEL_TASKS_PER_THREAD)).max(1);
 
-        let counts: Vec<u32> = {
-            let _s = info_span!("count_pass").entered();
-            (0..n_atoms)
-                .into_par_iter()
-                .with_min_len(min_len)
-                .map(|i| self.count_atom_neighbors(i, cell, cutoff_sq) as u32)
-                .collect()
-        };
+        let results: Vec<(i64, i64, i32, i32, i32)> = (0..n_atoms)
+            .into_par_iter()
+            .with_min_len(min_len)
+            .flat_map(|i| {
+                let mut local_neighbors = Vec::new();
+                self.search_atom_neighbors_collect(i, cell, cutoff_sq, &mut local_neighbors);
+                local_neighbors
+            })
+            .collect();
 
-        let mut offsets = Vec::with_capacity(n_atoms + 1);
-        let mut total: usize = 0;
-        for &c in &counts {
-            offsets.push(total);
-            total += c as usize;
-        }
-        offsets.push(total);
+        let n_edges = results.len();
+        let mut edge_i = Vec::with_capacity(n_edges);
+        let mut edge_j = Vec::with_capacity(n_edges);
+        let mut shifts = Vec::with_capacity(n_edges * 3);
 
-        let mut edge_i = vec![0i64; total];
-        let mut edge_j = vec![0i64; total];
-        let mut shifts = vec![0i32; total * 3];
-
-        let edge_i_ptr = edge_i.as_mut_ptr() as usize;
-        let edge_j_ptr = edge_j.as_mut_ptr() as usize;
-        let shifts_ptr = shifts.as_mut_ptr() as usize;
-
-        {
-            let _s = info_span!("fill_pass").entered();
-            (0..n_atoms)
-                .into_par_iter()
-                .with_min_len(min_len)
-                .for_each(|i| {
-                    let offset = offsets[i];
-                    unsafe {
-                        let ei = std::slice::from_raw_parts_mut(edge_i_ptr as *mut i64, total);
-                        let ej = std::slice::from_raw_parts_mut(edge_j_ptr as *mut i64, total);
-                        let s = std::slice::from_raw_parts_mut(shifts_ptr as *mut i32, total * 3);
-
-                        self.fill_atom_neighbors(i, cell, cutoff_sq, offset, ei, ej, s);
-                    }
-                });
+        for (i, j, sx, sy, sz) in results {
+            edge_i.push(i);
+            edge_j.push(j);
+            shifts.push(sx);
+            shifts.push(sy);
+            shifts.push(sz);
         }
 
         (edge_i, edge_j, shifts)
@@ -259,189 +237,73 @@ impl CellList {
         let n_atoms = self.particles.len();
         let n_cutoffs = cutoffs.len();
 
-        // Sort cutoffs to handle disjoint correctly and efficiently
-        let mut sorted_indices: Vec<usize> = (0..n_cutoffs).collect();
-        sorted_indices.sort_by(|&a, &b| cutoffs[a].partial_cmp(&cutoffs[b]).unwrap());
-
-        let sorted_cutoffs_sq: Vec<f64> = sorted_indices
-            .iter()
-            .map(|&i| cutoffs[i] * cutoffs[i])
-            .collect();
-        let max_cutoff_sq = sorted_cutoffs_sq.iter().cloned().next_back().unwrap_or(0.0);
-
-        // 1. Count pass
         let num_threads = rayon::current_num_threads();
         let min_len = (n_atoms / (num_threads * PARALLEL_TASKS_PER_THREAD)).max(1);
 
-        // Flattened counts: counts[i * n_cutoffs + k]
-        let mut counts = vec![0u32; n_atoms * n_cutoffs];
-        {
-            let _s = info_span!("count_pass_multi").entered();
-            counts
-                .par_chunks_mut(n_cutoffs)
-                .enumerate()
-                .for_each(|(i, atom_counts)| {
-                    self.count_atom_neighbors_multi(
-                        i,
-                        cell,
-                        &sorted_cutoffs_sq,
-                        max_cutoff_sq,
-                        atom_counts,
-                        disjoint,
-                    );
-                });
-        }
-
-        // 2. Offsets
-        let mut offsets = vec![0usize; n_atoms * n_cutoffs];
-        let mut totals = vec![0usize; n_cutoffs];
-
-        for k in 0..n_cutoffs {
-            let mut accum = 0;
-            for i in 0..n_atoms {
-                offsets[i * n_cutoffs + k] = accum;
-                accum += counts[i * n_cutoffs + k] as usize;
-            }
-            totals[k] = accum;
-        }
-
-        // 3. Allocate results
-        let mut result_edge_i: Vec<Vec<i64>> = totals.iter().map(|&t| vec![0; t]).collect();
-        let mut result_edge_j: Vec<Vec<i64>> = totals.iter().map(|&t| vec![0; t]).collect();
-        let mut result_shifts: Vec<Vec<i32>> = totals.iter().map(|&t| vec![0; t * 3]).collect();
-
-        let ptrs: Vec<(usize, usize, usize)> = (0..n_cutoffs)
-            .map(|k| {
-                (
-                    result_edge_i[k].as_mut_ptr() as usize,
-                    result_edge_j[k].as_mut_ptr() as usize,
-                    result_shifts[k].as_mut_ptr() as usize,
-                )
+        let results: Vec<Vec<Vec<(i64, i64, i32, i32, i32)>>> = (0..n_atoms)
+            .into_par_iter()
+            .with_min_len(min_len)
+            .map(|i| {
+                let mut atom_results = vec![Vec::new(); n_cutoffs];
+                self.search_atom_neighbors_multi_collect(
+                    i,
+                    cell,
+                    cutoffs,
+                    disjoint,
+                    &mut atom_results,
+                );
+                atom_results
             })
             .collect();
 
-        // 4. Fill pass
-        {
-            let _s = info_span!("fill_pass_multi").entered();
-            (0..n_atoms)
-                .into_par_iter()
-                .with_min_len(min_len)
-                .for_each(|i| {
-                    let atom_offsets = &offsets[i * n_cutoffs..(i + 1) * n_cutoffs];
+        let mut final_results = Vec::with_capacity(n_cutoffs);
+        for k in 0..n_cutoffs {
+            let total_at_k: usize = results.iter().map(|atom_res| atom_res[k].len()).sum();
+            let mut edge_i = Vec::with_capacity(total_at_k);
+            let mut edge_j = Vec::with_capacity(total_at_k);
+            let mut shifts = Vec::with_capacity(total_at_k * 3);
 
-                    unsafe {
-                        self.fill_atom_neighbors_multi(
-                            i,
-                            cell,
-                            &sorted_cutoffs_sq,
-                            max_cutoff_sq,
-                            atom_offsets,
-                            &ptrs,
-                            disjoint,
-                        );
-                    }
-                });
-        }
-
-        // Assemble return - Reorder back to original input cutoff order
-        let mut final_results = vec![(Vec::new(), Vec::new(), Vec::new()); n_cutoffs];
-        for (rank, &orig_idx) in sorted_indices.iter().enumerate() {
-            final_results[orig_idx] = (
-                std::mem::take(&mut result_edge_i[rank]),
-                std::mem::take(&mut result_edge_j[rank]),
-                std::mem::take(&mut result_shifts[rank]),
-            );
+            for atom_res in &results {
+                for (i, j, sx, sy, sz) in &atom_res[k] {
+                    edge_i.push(*i);
+                    edge_j.push(*j);
+                    shifts.push(*sx);
+                    shifts.push(*sy);
+                    shifts.push(*sz);
+                }
+            }
+            final_results.push((edge_i, edge_j, shifts));
         }
         final_results
     }
 
-    fn count_atom_neighbors_multi(
+    fn search_atom_neighbors_multi_collect(
         &self,
         i: usize,
         cell: &Cell,
-        sorted_cutoffs_sq: &[f64],
-        max_cutoff_sq: f64,
-        counts: &mut [u32],
+        cutoffs: &[f64],
         disjoint: bool,
+        results: &mut [Vec<(i64, i64, i32, i32, i32)>],
     ) {
-        let pos_i_w = self.pos_wrapped[i];
-        let h_matrix = cell.h();
-
-        let frac_i = cell.to_fractional(&pos_i_w);
-        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
-        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
-        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
-
-        let i_orig = self.particles[i];
-
-        for dx in -self.n_search.x..=self.n_search.x {
-            for dy in -self.n_search.y..=self.n_search.y {
-                for dz in -self.n_search.z..=self.n_search.z {
-                    let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
-                    let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
-                    let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
-
-                    let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
-                    let rank = self.bin_ranks[linear_idx];
-                    let start_j = self.cell_starts[rank];
-                    let end_j = self.cell_starts[rank + 1];
-
-                    if start_j == end_j {
-                        continue;
-                    }
-
-                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
-
-                    for sorted_idx_j in start_j..end_j {
-                        let j_orig = self.particles[sorted_idx_j];
-                        if i_orig >= j_orig {
-                            continue;
-                        }
-                        let disp: Vector3<f64> =
-                            (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
-                        let dist_sq = disp.norm_squared();
-
-                        if dist_sq < max_cutoff_sq {
-                            for (k, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
-                                if dist_sq < rc_sq {
-                                    counts[k] += 1;
-                                    if disjoint {
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // SAFETY: The caller must ensure that atom_offsets and ptrs are valid and imply exclusive mutable access
-    // to the regions of the output vectors assigned to this atom.
-    #[allow(clippy::too_many_arguments)]
-    unsafe fn fill_atom_neighbors_multi(
-        &self,
-        i: usize,
-        cell: &Cell,
-        sorted_cutoffs_sq: &[f64],
-        max_cutoff_sq: f64,
-        atom_offsets: &[usize],         // offsets for this atom for each rank
-        ptrs: &[(usize, usize, usize)], // global pointers for each rank
-        disjoint: bool,
-    ) {
+        let n_cutoffs = cutoffs.len();
         let pos_i_w = self.pos_wrapped[i];
         let s_i = self.atom_shifts[i];
         let h_matrix = cell.h();
 
+        let mut sorted_indices: Vec<usize> = (0..n_cutoffs).collect();
+        sorted_indices.sort_by(|&a, &b| cutoffs[a].partial_cmp(&cutoffs[b]).unwrap());
+        let sorted_cutoffs_sq: Vec<f64> = sorted_indices
+            .iter()
+            .map(|&k| cutoffs[k] * cutoffs[k])
+            .collect();
+        let max_cutoff_sq = sorted_cutoffs_sq.iter().cloned().next_back().unwrap_or(0.0);
+
         let frac_i = cell.to_fractional(&pos_i_w);
         let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
         let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
         let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
 
         let i_orig = self.particles[i];
-
-        let mut local_counts = vec![0usize; sorted_cutoffs_sq.len()];
 
         for dx in -self.n_search.x..=self.n_search.x {
             for dy in -self.n_search.y..=self.n_search.y {
@@ -454,10 +316,6 @@ impl CellList {
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
                     let end_j = self.cell_starts[rank + 1];
-
-                    if start_j == end_j {
-                        continue;
-                    }
 
                     let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
 
@@ -486,24 +344,14 @@ impl CellList {
                                         computed_shifts = true;
                                     }
 
-                                    let write_idx = atom_offsets[k] + local_counts[k];
+                                    results[sorted_indices[k]].push((
+                                        i_orig as i64,
+                                        j_orig as i64,
+                                        sx_diff,
+                                        sy_diff,
+                                        sz_diff,
+                                    ));
 
-                                    let (ptr_i, ptr_j, ptr_s) = ptrs[k];
-                                    let p_i = ptr_i as *mut i64;
-                                    let p_j = ptr_j as *mut i64;
-                                    let p_s = ptr_s as *mut i32;
-
-                                    unsafe {
-                                        *p_i.add(write_idx) = i_orig as i64;
-                                        *p_j.add(write_idx) = j_orig as i64;
-
-                                        let ps_base = p_s.add(write_idx * 3);
-                                        *ps_base = sx_diff;
-                                        *ps_base.add(1) = sy_diff;
-                                        *ps_base.add(2) = sz_diff;
-                                    }
-
-                                    local_counts[k] += 1;
                                     if disjoint {
                                         break;
                                     }
@@ -516,63 +364,12 @@ impl CellList {
         }
     }
 
-    fn count_atom_neighbors(&self, i: usize, cell: &Cell, cutoff_sq: f64) -> usize {
-        let pos_i_w = self.pos_wrapped[i];
-        let h_matrix = cell.h();
-
-        let frac_i = cell.to_fractional(&pos_i_w);
-        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
-        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
-        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
-
-        let i_orig = self.particles[i];
-
-        let mut count = 0;
-        for dx in -self.n_search.x..=self.n_search.x {
-            for dy in -self.n_search.y..=self.n_search.y {
-                for dz in -self.n_search.z..=self.n_search.z {
-                    let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
-                    let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
-                    let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
-
-                    let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
-                    let rank = self.bin_ranks[linear_idx];
-                    let start_j = self.cell_starts[rank];
-                    let end_j = self.cell_starts[rank + 1];
-
-                    if start_j == end_j {
-                        continue;
-                    }
-
-                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
-
-                    for sorted_idx_j in start_j..end_j {
-                        let j_orig = self.particles[sorted_idx_j];
-                        if i_orig >= j_orig {
-                            continue;
-                        }
-                        let disp: Vector3<f64> =
-                            (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
-                        if disp.norm_squared() < cutoff_sq {
-                            count += 1;
-                        }
-                    }
-                }
-            }
-        }
-        count
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn fill_atom_neighbors(
+    fn search_atom_neighbors_collect(
         &self,
         i: usize,
         cell: &Cell,
         cutoff_sq: f64,
-        mut offset: usize,
-        edge_i: &mut [i64],
-        edge_j: &mut [i64],
-        shifts: &mut [i32],
+        neighbors: &mut Vec<(i64, i64, i32, i32, i32)>,
     ) {
         let pos_i_w = self.pos_wrapped[i];
         let s_i = self.atom_shifts[i];
@@ -611,15 +408,14 @@ impl CellList {
                         let disp: Vector3<f64> =
                             (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
                         if disp.norm_squared() < cutoff_sq {
-                            edge_i[offset] = i_orig as i64;
-                            edge_j[offset] = j_orig as i64;
-
                             let s_j = self.atom_shifts[sorted_idx_j];
-                            shifts[offset * 3] = s_j.x - s_i.x + sx;
-                            shifts[offset * 3 + 1] = s_j.y - s_i.y + sy;
-                            shifts[offset * 3 + 2] = s_j.z - s_i.z + sz;
-
-                            offset += 1;
+                            neighbors.push((
+                                i_orig as i64,
+                                j_orig as i64,
+                                s_j.x - s_i.x + sx,
+                                s_j.y - s_i.y + sy,
+                                s_j.z - s_i.z + sz,
+                            ));
                         }
                     }
                 }

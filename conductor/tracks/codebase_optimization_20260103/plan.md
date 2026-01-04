@@ -6,12 +6,12 @@
 - [x] Task: Establish 10k/20k atom baseline benchmarks in a dedicated benchmark folder c7f4815
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Profiling & Baseline' (Protocol in workflow.md) 20c916c
 
-## Phase 2: Spatial Sorting (Cache Locality) [checkpoint: 49bcfcf]
+## Phase 2: Spatial Sorting (Cache Locality) [checkpoint: bf687dd]
 - [x] Task: Implement Z-order (Morton) index calculation for atom positions 76b7cdf
 - [x] Task: Refactor `CellList::build` to reorder the `pos_wrapped` and `atom_shifts` arrays based on spatial index 830ad06
 - [x] Task: Write tests to verify that spatial reordering doesn't break neighbor indexing fa9266b
 - [x] Task: Verify cache hit rate improvement using `perf stat` or equivalent 49bcfcf
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Spatial Sorting (Cache Locality)' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Spatial Sorting (Cache Locality)' (Protocol in workflow.md) bf687dd
 
 ## Phase 3: Buffer Management & Allocation Optimization [checkpoint: ee573cf]
 - [x] Task: Refactor `par_search_optimized` to use a more compact storage for intermediate neighbor counts cbbb8ca

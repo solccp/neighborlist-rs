@@ -3,6 +3,12 @@ use nalgebra::Vector3;
 use rayon::prelude::*;
 use tracing::info_span;
 
+// Internal tuning parameters
+const BRUTE_FORCE_CAPACITY_FACTOR: usize = 10;
+const Z_ORDER_BITS: u32 = 21;
+const Z_ORDER_CLAMP_MAX: f64 = 0.999999;
+const PARALLEL_TASKS_PER_THREAD: usize = 64;
+
 pub struct CellList {
     /// particles[sorted_idx] = original_idx
     particles: Vec<usize>,
@@ -189,7 +195,7 @@ impl CellList {
         // Aim for at least 64 tasks per thread to allow work-stealing to be effective
         // without creating too much overhead for small systems.
         let num_threads = rayon::current_num_threads();
-        let min_len = (n_atoms / (num_threads * 64)).max(1);
+        let min_len = (n_atoms / (num_threads * PARALLEL_TASKS_PER_THREAD)).max(1);
 
         let counts: Vec<u32> = {
             let _s = info_span!("count_pass").entered();
@@ -406,9 +412,9 @@ fn div_mod(val: i32, max: i32) -> (usize, i32) {
 
 /// Computes a 64-bit Morton (Z-order) index for fractional coordinates [0, 1).
 fn compute_z_order(frac: &Vector3<f64>) -> u64 {
-    let x = (frac.x.clamp(0.0, 0.999999) * (1u64 << 21) as f64) as u64;
-    let y = (frac.y.clamp(0.0, 0.999999) * (1u64 << 21) as f64) as u64;
-    let z = (frac.z.clamp(0.0, 0.999999) * (1u64 << 21) as f64) as u64;
+    let x = (frac.x.clamp(0.0, Z_ORDER_CLAMP_MAX) * (1u64 << Z_ORDER_BITS) as f64) as u64;
+    let y = (frac.y.clamp(0.0, Z_ORDER_CLAMP_MAX) * (1u64 << Z_ORDER_BITS) as f64) as u64;
+    let z = (frac.z.clamp(0.0, Z_ORDER_CLAMP_MAX) * (1u64 << Z_ORDER_BITS) as f64) as u64;
 
     interleave_3(x) | (interleave_3(y) << 1) | (interleave_3(z) << 2)
 }
@@ -451,7 +457,7 @@ pub fn brute_force_search_full(
     let n = positions.len();
     let cutoff_sq = cutoff * cutoff;
     // Estimate capacity: avg 50 neighbors? for small system maybe less.
-    let capacity = n * 10; 
+    let capacity = n * BRUTE_FORCE_CAPACITY_FACTOR; 
     let mut edge_i = Vec::with_capacity(capacity);
     let mut edge_j = Vec::with_capacity(capacity);
     let mut shifts = Vec::with_capacity(capacity * 3);

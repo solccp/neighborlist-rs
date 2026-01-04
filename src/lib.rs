@@ -3,6 +3,11 @@ use pyo3::prelude::*;
 pub mod cell;
 pub mod search;
 
+// Tuning parameters
+const BRUTE_FORCE_THRESHOLD: usize = 500;
+const PARALLEL_THRESHOLD: usize = 20;
+const AUTO_BOX_MARGIN: f64 = 1.0;
+
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -81,7 +86,7 @@ fn build_neighborlists<'py>(
         c.inner.clone()
     } else {
         // Infer cell from positions for non-PBC
-        let margin = cutoff + 1.0;
+        let margin = cutoff + AUTO_BOX_MARGIN;
         let span = max_bound - min_bound;
         let lx = span.x + 2.0 * margin;
         let ly = span.y + 2.0 * margin;
@@ -100,12 +105,12 @@ fn build_neighborlists<'py>(
     // Strict inequality to be safe with rounding? <= is typically fine for MIC logic, but < is safer.
     let mic_safe = cutoff * 2.0 < min_width;
 
-    let (edge_i, edge_j, shifts) = if n_atoms < 500 && mic_safe {
+    let (edge_i, edge_j, shifts) = if n_atoms < BRUTE_FORCE_THRESHOLD && mic_safe {
         search::brute_force_search_full(&cell_inner, &pos_vec, cutoff)
     } else {
         let cl = CellList::build(&cell_inner, &pos_vec, cutoff);
 
-        if parallel {
+        if parallel && n_atoms >= PARALLEL_THRESHOLD {
             cl.par_search_optimized(&cell_inner, cutoff)
         } else {
             let neighbors = cl.search(&cell_inner, &pos_vec, cutoff);

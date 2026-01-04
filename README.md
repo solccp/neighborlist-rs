@@ -4,6 +4,9 @@ High-performance neighborlist construction for atomistic systems in Rust with Py
 
 ## Features
 - **High-performance Cell Lists:** O(N) scaling for large systems.
+- **Batched Processing:** Parallelized neighbor list construction across multiple systems.
+- **Multi-Cutoff pass:** Generate multiple neighbor lists (e.g., 6Å, 14Å, 20Å) in a single optimized pass.
+- **Auto-Box Inference:** Automatic bounding box calculation for isolated molecules.
 - **Robust PBC support:** Minimum image convention for orthorhombic and triclinic cells.
 - **Parallel Search:** Multi-core neighbor search using Rayon.
 - **Python bindings:** Seamless integration with Python via PyO3.
@@ -18,34 +21,16 @@ pip install .
 
 ## Usage (Python)
 
+Refer to [PYTHON_API.md](./PYTHON_API.md) for full documentation and advanced usage examples.
+
+### Quick Start
 ```python
 import neighborlist_rs
 import numpy as np
 
-# 1. Define the cell matrix (column vectors a, b, c)
-h = [
-    [10.0, 0.0, 0.0],
-    [0.0, 10.0, 0.0],
-    [0.0, 0.0, 10.0]
-]
-cell = neighborlist_rs.PyCell(h)
-
-# 2. Define atom positions (N, 3)
-positions = np.array([
-    [1.0, 1.0, 1.0],
-    [1.5, 1.0, 1.0],
-    [9.5, 1.0, 1.0]
-], dtype=np.float64)
-
-# 3. Build neighbor lists
-cutoff = 2.0
-result = neighborlist_rs.build_neighborlists(cell, positions, cutoff, parallel=True)
-
-# 4. Access indices and shifts
-local = result["local"]
-edge_i = local["edge_i"] # [0, 0]
-edge_j = local["edge_j"] # [1, 2]
-shifts = local["shift"]  # [[0, 0, 0], [-1, 0, 0]]
+# Single system search
+result = neighborlist_rs.build_neighborlists(None, positions, cutoff=5.0)
+edges = result["local"]["edge_i"]
 ```
 
 ## Performance

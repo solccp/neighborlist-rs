@@ -1,0 +1,150 @@
+# Python API Documentation: neighborlist-rs
+
+`neighborlist_rs` is a high-performance Rust library for neighbor list construction, designed for molecular dynamics and machine learning interatomic potentials (MLIPs).
+
+## Table of Contents
+1. [Core Conventions](#core-conventions)
+2. [Single-System API](#single-system-api)
+   - [Basic Search](#basic-neighbor-search)
+   - [Isolated Systems (Non-PBC)](#isolated-systems-non-pbc)
+   - [Multi-Cutoff Search](#multi-cutoff-search)
+3. [Batched API](#batched-api)
+   - [Standard Batch](#standard-batched-search)
+   - [Multi-Cutoff Batch](#multi-cutoff-batched-search)
+4. [Utility Classes & Methods](#utility-classes--methods)
+5. [Advanced Tuning](#performance-tuning)
+
+---
+
+## Core Conventions
+
+### Cell Matrix (H-matrix)
+The cell matrix $H$ is defined such that the columns are the lattice vectors $\mathbf{a}, \mathbf{b}, \mathbf{c}$:
+$$H = [\mathbf{a} | \mathbf{b} | \mathbf{c}] = \begin{bmatrix} a_x & b_x & c_x \\ a_y & b_y & c_y \\ a_z & b_z & c_z \end{bmatrix}$$
+*Note: This is the transpose of the convention used by ASE.*
+
+### Result Schema
+All neighbor list results return a dictionary with a `"local"` key containing:
+- `edge_i`: `(M,)` uint64 array of source atom indices.
+- `edge_j`: `(M,)` uint64 array of target atom indices.
+- `shift`: `(M, 3)` int32 array of periodic shifts.
+
+### Reconstructing Vectors
+To compute the displacement vector $\mathbf{r}_{ij}$ between atoms $i$ and $j$ considering PBC:
+$$\mathbf{r}_{ij} = \mathbf{pos}_j + (S_{ij} \cdot H) - \mathbf{pos}_i$$
+Where $S_{ij}$ is the shift vector for that edge.
+
+---
+
+## Single-System API
+
+### Basic Neighbor Search
+Computes pairs within a single cutoff for a periodic system.
+
+```python
+import neighborlist_rs
+import numpy as np
+
+# Define 10x10x10 cubic cell
+cell = neighborlist_rs.PyCell([[10.0, 0, 0], [0, 10.0, 0], [0, 0, 10.0]])
+positions = np.random.rand(100, 3) * 10.0
+
+result = neighborlist_rs.build_neighborlists(cell, positions, cutoff=5.0)
+edges = result["local"]
+print(f"Found {len(edges['edge_i'])} pairs")
+```
+
+### Isolated Systems (Non-PBC)
+If you pass `None` as the cell, the library automatically infers a safe bounding box for the system.
+
+```python
+# Pass None for isolated systems
+result = neighborlist_rs.build_neighborlists(None, positions, cutoff=5.0)
+```
+
+### Multi-Cutoff Search
+Compute multiple neighbor lists (e.g., Short-range vs Electrostatics) in a **single pass**. This is much faster than calling the library multiple times.
+
+```python
+cutoffs = [6.0, 14.0, 20.0]
+results = neighborlist_rs.build_neighborlists_multi(cell, positions, cutoffs)
+
+# Access results by cutoff value
+for rc in cutoffs:
+    edges = results[rc]["local"]
+    print(f"Cutoff {rc}A: {len(edges['edge_i'])} edges")
+```
+
+---
+
+## Batched API
+
+The Batched API allows processing a large number of systems (e.g., a training batch) in parallel across CPU cores. This minimizes the overhead of Python loops and the GIL.
+
+### Standard Batched Search
+Input positions should be a single flattened array, with a `batch` array indicating system ownership.
+
+```python
+# positions: (N_total, 3), batch: (N_total,)
+# cells: (B, 3, 3) where B is number of systems
+batch_res = neighborlist_rs.build_neighborlists_batch(
+    positions, batch, cells=cells, cutoff=5.0
+)
+
+all_edges = batch_res["local"]
+```
+
+### Multi-Cutoff Batched Search
+The most efficient way to generate data for MLIPs. Processes an entire batch and multiple cutoffs in one call.
+
+```python
+cutoffs = [6.0, 14.0]
+results = neighborlist_rs.build_neighborlists_batch_multi(
+    positions, batch, cells=cells, cutoffs=cutoffs
+)
+
+# Returns: { 6.0: {"local": ...}, 14.0: {"local": ...} }
+mlp_edges = results[6.0]["local"]
+dispersion_edges = results[14.0]["local"]
+```
+
+*Note: In batched mode, if `cells[i]` is a zero-matrix, system `i` is treated as non-PBC with auto-box inference.*
+
+---
+
+## Utility Classes & Methods
+
+### `PyCell`
+Represents the simulation box.
+- `PyCell(h_matrix)`: Create from 3x3 list/array.
+- `wrap(pos)`: Wrap a 3D point into the primary cell.
+
+### Global Configuration
+```python
+# Set number of Rayon threads (default is total logical cores)
+neighborlist_rs.set_num_threads(8)
+
+# Get current thread count
+n = neighborlist_rs.get_num_threads()
+
+# Initialize Rust-side logging (info, debug, trace)
+neighborlist_rs.init_logging("info")
+```
+
+---
+
+## Performance Tuning
+
+### 1. Brute Force Threshold
+For systems with $N < 500$ atoms, the library automatically uses a highly optimized brute-force kernel which avoids the overhead of cell-list construction.
+
+### 2. Parallelism Threshold
+For tiny systems ($N < 20$), internal parallelism is disabled to avoid thread synchronization overhead. In batched mode, parallelism happens *across* systems, so even 1-atom systems are processed efficiently in parallel.
+
+### 3. Compilation
+For maximum performance, ensure the library is compiled with native hardware support:
+```bash
+# Handled automatically if using the provided .cargo/config.toml
+maturin develop --release
+```
+

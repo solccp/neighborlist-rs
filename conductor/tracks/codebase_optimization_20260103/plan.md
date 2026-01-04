@@ -25,8 +25,8 @@
 - [x] Task: Benchmark scaling on 1, 2, 4, 8, 16, 20+ threads to find the saturation point 3d56f66
 - [x] Task: Conductor - User Manual Verification 'Phase 4: Parallelization Tuning' (Protocol in workflow.md) 9dcfd95
 
-## Phase 5: Final Validation
+## Phase 5: Final Validation [checkpoint: ffbfb49]
 - [x] Task: Run full `proptest` suite with high iteration count (1000+) to ensure robustness c485462
 - [x] Task: Final comparison against `vesin` across all cutoffs (6.0, 14.0, 20.0) f77c87f
 - [x] Task: Update `README.md` with new performance metrics and scaling charts 4328150
-- [~] Task: Conductor - User Manual Verification 'Phase 5: Final Validation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 5: Final Validation' (Protocol in workflow.md) ffbfb49

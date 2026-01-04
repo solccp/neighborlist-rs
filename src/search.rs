@@ -433,6 +433,44 @@ mod tests {
     }
 
     #[test]
+    fn test_spatial_reordering_correctness() {
+        let h = Matrix3::identity() * 10.0;
+        let cell = Cell::new(h).unwrap();
+        
+        // Atoms that are far in original index but close in space
+        let positions = vec![
+            Vector3::new(1.0, 1.0, 1.0), // idx 0
+            Vector3::new(9.0, 9.0, 9.0), // idx 1
+            Vector3::new(1.1, 1.1, 1.1), // idx 2
+        ];
+        
+        let cutoff = 2.0;
+        let cl = CellList::build(&cell, &positions, cutoff);
+        
+        // Check that atoms 0 and 2 are in the same bin and thus contiguous in pos_wrapped
+        let bin0 = cl.get_atoms_in_bin(0, 0, 0);
+        assert_eq!(bin0.len(), 2);
+        
+        // Find indices of 0 and 2 in the sorted particles list
+        let mut loc0 = None;
+        let mut loc2 = None;
+        for (i, &orig_idx) in cl.particles.iter().enumerate() {
+            if orig_idx == 0 { loc0 = Some(i); }
+            if orig_idx == 2 { loc2 = Some(i); }
+        }
+        
+        let loc0 = loc0.unwrap();
+        let loc2 = loc2.unwrap();
+        
+        // They should be adjacent in memory (in the same bin)
+        assert!((loc0 as isize - loc2 as isize).abs() == 1);
+        
+        // Neighbor search should still find (0, 2)
+        let neighbors = cl.search(&cell, &positions, cutoff);
+        assert!(neighbors.iter().any(|&(i, j, _, _, _)| (i == 0 && j == 2) || (i == 2 && j == 0)));
+    }
+
+    #[test]
     fn test_brute_force_reference() {
         let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();

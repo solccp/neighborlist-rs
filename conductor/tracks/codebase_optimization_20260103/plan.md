@@ -7,7 +7,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Profiling & Baseline' (Protocol in workflow.md) 20c916c
 
 ## Phase 2: Spatial Sorting (Cache Locality)
-- [ ] Task: Implement Z-order (Morton) index calculation for atom positions
+- [x] Task: Implement Z-order (Morton) index calculation for atom positions 76b7cdf
 - [ ] Task: Refactor `CellList::build` to reorder the `pos_wrapped` and `atom_shifts` arrays based on spatial index
 - [ ] Task: Write tests to verify that spatial reordering doesn't break neighbor indexing
 - [ ] Task: Verify cache hit rate improvement using `perf stat` or equivalent

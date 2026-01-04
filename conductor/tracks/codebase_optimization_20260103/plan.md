@@ -14,7 +14,7 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Spatial Sorting (Cache Locality)' (Protocol in workflow.md)
 
 ## Phase 3: Buffer Management & Allocation Optimization
-- [ ] Task: Refactor `par_search_optimized` to use a more compact storage for intermediate neighbor counts
+- [x] Task: Refactor `par_search_optimized` to use a more compact storage for intermediate neighbor counts cbbb8ca
 - [ ] Task: Explore using `smallvec` or in-place sorting to reduce peak heap usage during the "Fill" pass
 - [ ] Task: Minimize Python/Rust conversion overhead by optimizing the dictionary construction in `lib.rs`
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Buffer Management & Allocation Optimization' (Protocol in workflow.md)

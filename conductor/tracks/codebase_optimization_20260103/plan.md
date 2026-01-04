@@ -23,7 +23,7 @@
 - [x] Task: Implement adaptive chunk sizing for Rayon based on system size and CPU count 3d56f66
 - [x] Task: Optimize the "Pass 1" counting phase to be more work-stealing friendly 3d56f66
 - [x] Task: Benchmark scaling on 1, 2, 4, 8, 16, 20+ threads to find the saturation point 3d56f66
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Parallelization Tuning' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 4: Parallelization Tuning' (Protocol in workflow.md)
 
 ## Phase 5: Final Validation
 - [ ] Task: Run full `proptest` suite with high iteration count (1000+) to ensure robustness

@@ -121,3 +121,47 @@ def test_build_neighborlists_no_cell():
     assert edge_j[0] == 1
     # No PBC shifts expected for auto-boxed isolated system
     assert np.all(shifts[0] == [0, 0, 0])
+
+def test_build_neighborlists_multi():
+    box_size = 10.0
+    h = [[box_size, 0.0, 0.0], [0.0, box_size, 0.0], [0.0, 0.0, box_size]]
+    cell = neighborlist_rs.PyCell(h)
+    
+    positions = np.array([
+        [1.0, 1.0, 1.0],
+        [2.0, 1.0, 1.0], # Dist 1.0
+        [5.0, 1.0, 1.0], # Dist 4.0
+    ], dtype=np.float64)
+    
+    cutoffs = [2.0, 5.0]
+    result = neighborlist_rs.build_neighborlists_multi(cell, positions, cutoffs)
+    
+    assert 2.0 in result
+    assert 5.0 in result
+    
+    # Cutoff 2.0: only (0, 1)
+    res2 = result[2.0]["local"]
+    assert len(res2["edge_i"]) == 1
+    assert res2["edge_i"][0] == 0
+    assert res2["edge_j"][0] == 1
+    
+    # Cutoff 5.0: (0, 1) and (0, 2) and (1, 2)
+    # (1, 2) distance is 3.0
+    res5 = result[5.0]["local"]
+    assert len(res5["edge_i"]) == 3
+    
+    # Verify correctness against single calls
+    for r in cutoffs:
+        single = neighborlist_rs.build_neighborlists(cell, positions, r)["local"]
+        multi = result[r]["local"]
+        
+        # Sort for comparison
+        si, sj = single["edge_i"], single["edge_j"]
+        mi, mj = multi["edge_i"], multi["edge_j"]
+        
+        ks = np.lexsort((sj, si))
+        km = np.lexsort((mj, mi))
+        
+        np.testing.assert_array_equal(si[ks], mi[km])
+        np.testing.assert_array_equal(sj[ks], mj[km])
+    

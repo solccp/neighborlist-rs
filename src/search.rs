@@ -239,6 +239,259 @@ impl CellList {
         (edge_i, edge_j, shifts)
     }
 
+    pub fn par_search_multi(
+        &self,
+        cell: &Cell,
+        cutoffs: &[f64],
+    ) -> Vec<(Vec<i64>, Vec<i64>, Vec<i32>)> {
+        let _span = info_span!("CellList::par_search_multi").entered();
+        let n_atoms = self.particles.len();
+        let n_cutoffs = cutoffs.len();
+        let cutoffs_sq: Vec<f64> = cutoffs.iter().map(|c| c * c).collect();
+        let max_cutoff_sq = cutoffs_sq.iter().cloned().fold(0./0., f64::max); // handle NaN safely? assumes valid
+
+        // 1. Count pass
+        let num_threads = rayon::current_num_threads();
+        let min_len = (n_atoms / (num_threads * PARALLEL_TASKS_PER_THREAD)).max(1);
+
+        // Flattened counts: counts[i * n_cutoffs + k]
+        let mut counts = vec![0u32; n_atoms * n_cutoffs];
+        {
+            let _s = info_span!("count_pass_multi").entered();
+            counts.par_chunks_mut(n_cutoffs)
+                .enumerate()
+                .for_each(|(i, atom_counts)| {
+                    self.count_atom_neighbors_multi(i, cell, &cutoffs_sq, max_cutoff_sq, atom_counts);
+                });
+        }
+
+        // 2. Offsets
+        let mut offsets = vec![0usize; n_atoms * n_cutoffs];
+        let mut totals = vec![0usize; n_cutoffs];
+        
+        for k in 0..n_cutoffs {
+            let mut accum = 0;
+            for i in 0..n_atoms {
+                offsets[i * n_cutoffs + k] = accum;
+                accum += counts[i * n_cutoffs + k] as usize;
+            }
+            totals[k] = accum;
+        }
+
+        // 3. Allocate results
+        // We can't easily share a mutable Vec of tuples across threads without UnsafeCell or splitting.
+        // Easier to allocate separate huge vectors for each cutoff's i, j, shifts.
+        // We need to pass raw pointers to the fill function.
+        
+        let mut result_edge_i: Vec<Vec<i64>> = totals.iter().map(|&t| vec![0; t]).collect();
+        let mut result_edge_j: Vec<Vec<i64>> = totals.iter().map(|&t| vec![0; t]).collect();
+        let mut result_shifts: Vec<Vec<i32>> = totals.iter().map(|&t| vec![0; t * 3]).collect();
+
+        // Create a struct/vec of Pointers to pass to the closure
+        // pointers[k] = (ptr_i, ptr_j, ptr_s)
+        let ptrs: Vec<(usize, usize, usize)> = (0..n_cutoffs).map(|k| {
+            (
+                result_edge_i[k].as_mut_ptr() as usize,
+                result_edge_j[k].as_mut_ptr() as usize,
+                result_shifts[k].as_mut_ptr() as usize,
+            )
+        }).collect();
+
+        // 4. Fill pass
+        {
+            let _s = info_span!("fill_pass_multi").entered();
+            (0..n_atoms).into_par_iter().with_min_len(min_len).for_each(|i| {
+                // Prepare slice pointers for this atom
+                // For each cutoff k, we need a mutable slice starting at offsets[i*n_cutoffs + k]
+                // We construct unsafe slices inside the fill function
+                
+                // We need to pass the *global* ptrs and the *local* offsets for atom i
+                let atom_offsets = &offsets[i * n_cutoffs .. (i + 1) * n_cutoffs];
+                
+                unsafe {
+                    self.fill_atom_neighbors_multi(
+                        i, 
+                        cell, 
+                        &cutoffs_sq, 
+                        max_cutoff_sq,
+                        atom_offsets, 
+                        &ptrs, 
+                        &totals // needed for bounds safety check if we wanted, but standard Unsafe slice just needs ptr + len
+                    );
+                }
+            });
+        }
+
+        // Assemble return
+        let mut final_results = Vec::with_capacity(n_cutoffs);
+        for k in 0..n_cutoffs {
+            final_results.push((
+                std::mem::take(&mut result_edge_i[k]),
+                std::mem::take(&mut result_edge_j[k]),
+                std::mem::take(&mut result_shifts[k]),
+            ));
+        }
+        final_results
+    }
+
+    fn count_atom_neighbors_multi(
+        &self, 
+        i: usize, 
+        cell: &Cell, 
+        cutoffs_sq: &[f64], 
+        max_cutoff_sq: f64,
+        counts: &mut [u32]
+    ) {
+        let pos_i_w = self.pos_wrapped[i];
+        let h_matrix = cell.h();
+
+        let frac_i = cell.to_fractional(&pos_i_w);
+        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
+        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
+        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+
+        let i_orig = self.particles[i];
+
+        for dx in -self.n_search.x..=self.n_search.x {
+            for dy in -self.n_search.y..=self.n_search.y {
+                for dz in -self.n_search.z..=self.n_search.z {
+                    let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
+                    let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
+                    let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
+
+                    let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
+                    let rank = self.bin_ranks[linear_idx];
+                    let start_j = self.cell_starts[rank];
+                    let end_j = self.cell_starts[rank + 1];
+
+                    if start_j == end_j {
+                        continue;
+                    }
+
+                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
+
+                    for sorted_idx_j in start_j..end_j {
+                        let j_orig = self.particles[sorted_idx_j];
+                        if i_orig >= j_orig {
+                            continue;
+                        }
+                        let disp: Vector3<f64> = (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
+                        let dist_sq = disp.norm_squared();
+                        
+                        // Check against max cutoff first to skip quickly
+                        if dist_sq < max_cutoff_sq {
+                            // Check against all cutoffs
+                            // Since cutoffs might not be sorted, we check all.
+                            // If they are sorted, we could optimize, but N=3 is small.
+                            for (k, &rc_sq) in cutoffs_sq.iter().enumerate() {
+                                if dist_sq < rc_sq {
+                                    counts[k] += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // SAFETY: The caller must ensure that atom_offsets and ptrs are valid and imply exclusive mutable access
+    // to the regions of the output vectors assigned to this atom.
+    unsafe fn fill_atom_neighbors_multi(
+        &self,
+        i: usize,
+        cell: &Cell,
+        cutoffs_sq: &[f64],
+        max_cutoff_sq: f64,
+        atom_offsets: &[usize], // offsets for this atom for each cutoff
+        ptrs: &[(usize, usize, usize)], // global pointers for each cutoff
+        _totals: &[usize], // debug info
+    ) {
+        let pos_i_w = self.pos_wrapped[i];
+        let s_i = self.atom_shifts[i];
+        let h_matrix = cell.h();
+
+        let frac_i = cell.to_fractional(&pos_i_w);
+        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
+        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
+        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+
+        let i_orig = self.particles[i];
+        
+        // Local counters to track how many we've written for this atom so far
+        // We use them to increment the offsets relative to `atom_offsets`
+        let mut local_counts = vec![0usize; cutoffs_sq.len()];
+
+        for dx in -self.n_search.x..=self.n_search.x {
+            for dy in -self.n_search.y..=self.n_search.y {
+                for dz in -self.n_search.z..=self.n_search.z {
+                    let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
+                    let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
+                    let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
+
+                    let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
+                    let rank = self.bin_ranks[linear_idx];
+                    let start_j = self.cell_starts[rank];
+                    let end_j = self.cell_starts[rank + 1];
+
+                    if start_j == end_j {
+                        continue;
+                    }
+
+                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
+
+                    for sorted_idx_j in start_j..end_j {
+                        let j_orig = self.particles[sorted_idx_j];
+                        if i_orig >= j_orig {
+                            continue;
+                        }
+                        let disp: Vector3<f64> = (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
+                        let dist_sq = disp.norm_squared();
+                        
+                        if dist_sq < max_cutoff_sq {
+                            let mut computed_shifts = false;
+                            let mut sx_diff = 0; 
+                            let mut sy_diff = 0;
+                            let mut sz_diff = 0;
+
+                            for (k, &rc_sq) in cutoffs_sq.iter().enumerate() {
+                                if dist_sq < rc_sq {
+                                    // Found neighbor for cutoff k
+                                    if !computed_shifts {
+                                        let s_j = self.atom_shifts[sorted_idx_j];
+                                        sx_diff = s_j.x - s_i.x + sx;
+                                        sy_diff = s_j.y - s_i.y + sy;
+                                        sz_diff = s_j.z - s_i.z + sz;
+                                        computed_shifts = true;
+                                    }
+
+                                    let write_idx = atom_offsets[k] + local_counts[k];
+                                    
+                                    let (ptr_i, ptr_j, ptr_s) = ptrs[k];
+                                    let p_i = ptr_i as *mut i64;
+                                    let p_j = ptr_j as *mut i64;
+                                    let p_s = ptr_s as *mut i32;
+
+                                    unsafe {
+                                        *p_i.add(write_idx) = i_orig as i64;
+                                        *p_j.add(write_idx) = j_orig as i64;
+                                        
+                                        let ps_base = p_s.add(write_idx * 3);
+                                        *ps_base = sx_diff;
+                                        *ps_base.add(1) = sy_diff;
+                                        *ps_base.add(2) = sz_diff;
+                                    }
+
+                                    local_counts[k] += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn count_atom_neighbors(&self, i: usize, cell: &Cell, cutoff_sq: f64) -> usize {
         let pos_i_w = self.pos_wrapped[i];
         let h_matrix = cell.h();
@@ -475,6 +728,53 @@ pub fn brute_force_search_full(
         }
     }
     (edge_i, edge_j, shifts)
+}
+
+pub fn brute_force_search_multi(
+    cell: &Cell,
+    positions: &[Vector3<f64>],
+    cutoffs: &[f64],
+) -> Vec<(Vec<i64>, Vec<i64>, Vec<i32>)> {
+    let n = positions.len();
+    let n_cutoffs = cutoffs.len();
+    let cutoffs_sq: Vec<f64> = cutoffs.iter().map(|c| c * c).collect();
+    // Safety for max: if empty cutoffs, this might be issue but assuming valid input
+    let max_cutoff_sq = cutoffs_sq.iter().cloned().fold(0.0, f64::max);
+    
+    let capacity = n * BRUTE_FORCE_CAPACITY_FACTOR;
+    
+    let mut edge_i_vecs: Vec<Vec<i64>> = vec![Vec::with_capacity(capacity); n_cutoffs];
+    let mut edge_j_vecs: Vec<Vec<i64>> = vec![Vec::with_capacity(capacity); n_cutoffs];
+    let mut shifts_vecs: Vec<Vec<i32>> = vec![Vec::with_capacity(capacity * 3); n_cutoffs];
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let (shift, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
+            let d2 = disp.norm_squared();
+            
+            if d2 < max_cutoff_sq {
+                for (k, &rc_sq) in cutoffs_sq.iter().enumerate() {
+                    if d2 < rc_sq {
+                        edge_i_vecs[k].push(i as i64);
+                        edge_j_vecs[k].push(j as i64);
+                        shifts_vecs[k].push(shift.x);
+                        shifts_vecs[k].push(shift.y);
+                        shifts_vecs[k].push(shift.z);
+                    }
+                }
+            }
+        }
+    }
+    
+    let mut results = Vec::with_capacity(n_cutoffs);
+    for k in 0..n_cutoffs {
+        results.push((
+            std::mem::take(&mut edge_i_vecs[k]),
+            std::mem::take(&mut edge_j_vecs[k]),
+            std::mem::take(&mut shifts_vecs[k]),
+        ));
+    }
+    results
 }
 
 #[cfg(test)]

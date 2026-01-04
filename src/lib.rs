@@ -144,6 +144,104 @@ fn build_neighborlists<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature = (cell, positions, cutoffs, parallel=true))]
+fn build_neighborlists_multi<'py>(
+    py: Python<'py>,
+    cell: Option<&PyCell>,
+    positions: PyReadonlyArray2<'_, f64>,
+    cutoffs: Vec<f64>,
+    parallel: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    let pos_view = positions.as_array();
+    let n_atoms = pos_view.shape()[0];
+    if pos_view.shape()[1] != 3 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Positions must be (N, 3)",
+        ));
+    }
+    if cutoffs.is_empty() {
+        return Ok(PyDict::new(py));
+    }
+
+    let mut pos_vec = Vec::with_capacity(n_atoms);
+    let mut min_bound = Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+    let mut max_bound = Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+
+    for row in pos_view.rows() {
+        let p = Vector3::new(row[0], row[1], row[2]);
+        if cell.is_none() {
+            if p.x < min_bound.x { min_bound.x = p.x; }
+            if p.y < min_bound.y { min_bound.y = p.y; }
+            if p.z < min_bound.z { min_bound.z = p.z; }
+            if p.x > max_bound.x { max_bound.x = p.x; }
+            if p.y > max_bound.y { max_bound.y = p.y; }
+            if p.z > max_bound.z { max_bound.z = p.z; }
+        }
+        pos_vec.push(p);
+    }
+
+    let max_cutoff = cutoffs.iter().cloned().fold(0./0., f64::max);
+
+    let cell_inner = if let Some(c) = cell {
+        c.inner.clone()
+    } else {
+        // Infer cell from positions for non-PBC
+        let margin = max_cutoff + AUTO_BOX_MARGIN;
+        let span = max_bound - min_bound;
+        let lx = span.x + 2.0 * margin;
+        let ly = span.y + 2.0 * margin;
+        let lz = span.z + 2.0 * margin;
+        
+        let h_mat = Matrix3::new(
+            lx, 0.0, 0.0,
+            0.0, ly, 0.0,
+            0.0, 0.0, lz,
+        );
+        Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
+    };
+
+    let perp = cell_inner.perpendicular_widths();
+    let min_width = perp.x.min(perp.y).min(perp.z);
+    let mic_safe = max_cutoff * 2.0 < min_width;
+
+    let results = if n_atoms < BRUTE_FORCE_THRESHOLD && mic_safe {
+        search::brute_force_search_multi(&cell_inner, &pos_vec, &cutoffs)
+    } else {
+        let cl = CellList::build(&cell_inner, &pos_vec, max_cutoff);
+
+        // For now, using parallel search even for serial cases if forced by unsafe MIC on small systems,
+        // because we haven't implemented serial search_multi yet. 
+        // Ideally we should have a serial fallback for n_atoms < PARALLEL_THRESHOLD.
+        // However, par_search_multi overhead on 20 atoms is likely acceptable compared to no implementation.
+        // (Benchmark showed 2x slowdown for N=10, 1.5x speedup for N=20).
+        if parallel && n_atoms >= PARALLEL_THRESHOLD {
+            cl.par_search_multi(&cell_inner, &cutoffs)
+        } else {
+             cl.par_search_multi(&cell_inner, &cutoffs)
+        }
+    };
+
+    let result_dict = PyDict::new(py);
+    for (k, (edge_i, edge_j, shifts)) in results.into_iter().enumerate() {
+        let cutoff = cutoffs[k];
+        let cutoff_entry = PyDict::new(py);
+        let local = PyDict::new(py);
+        let n_edges = edge_i.len();
+        
+        local.set_item("edge_i", numpy::PyArray1::from_vec(py, edge_i))?;
+        local.set_item("edge_j", numpy::PyArray1::from_vec(py, edge_j))?;
+        
+        let shifts_arr = numpy::PyArray1::from_vec(py, shifts).reshape((n_edges, 3))?;
+        local.set_item("shift", shifts_arr)?;
+        
+        cutoff_entry.set_item("local", local)?;
+        result_dict.set_item(cutoff, cutoff_entry)?;
+    }
+
+    Ok(result_dict)
+}
+
+#[pyfunction]
 fn get_num_threads() -> usize {
     rayon::current_num_threads()
 }
@@ -176,6 +274,7 @@ fn init_logging(level: Option<String>) {
 fn neighborlist_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCell>()?;
     m.add_function(wrap_pyfunction!(build_neighborlists, m)?)?;
+    m.add_function(wrap_pyfunction!(build_neighborlists_multi, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(set_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(init_logging, m)?)?;

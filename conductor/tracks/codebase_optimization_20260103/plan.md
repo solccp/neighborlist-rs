@@ -3,7 +3,7 @@
 ## Phase 1: Profiling & Baseline
 - [x] Task: Instrument code with `tracing` or `perf` hooks to measure bin-search vs overhead 2bfddf0
 - [x] Task: Implement a detailed memory profiler (e.g., using `dhat` or `heaptrack` in tests) 0c1a379
-- [ ] Task: Establish 10k/20k atom baseline benchmarks in a dedicated benchmark folder
+- [x] Task: Establish 10k/20k atom baseline benchmarks in a dedicated benchmark folder c7f4815
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Profiling & Baseline' (Protocol in workflow.md)
 
 ## Phase 2: Spatial Sorting (Cache Locality)

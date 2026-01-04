@@ -24,7 +24,7 @@ impl CellList {
         let n_atoms = positions.len();
 
         // 1. Compute Z-order indices and original positions in parallel
-        let atom_data: Vec<(u64, usize)> = {
+        let mut atom_data: Vec<(u64, usize)> = {
             let _s = info_span!("compute_z_order").entered();
             positions
                 .into_par_iter()
@@ -40,7 +40,6 @@ impl CellList {
         };
 
         // 2. Sort atoms spatially by global Z-order
-        let mut atom_data = atom_data;
         {
             let _s = info_span!("spatial_sort").entered();
             atom_data.sort_unstable_by_key(|&(z, _)| z);
@@ -79,43 +78,20 @@ impl CellList {
 
         let h_matrix = cell.h();
 
-        let reordered_data: Vec<(usize, Vector3<f64>, Vector3<i32>, usize)> = {
-            let _s = info_span!("reorder_and_wrap").entered();
-            atom_data
-                .into_par_iter()
-                .map(|(_z, original_idx)| {
-                    let pos = positions[original_idx];
-                    let frac = cell.to_fractional(&pos);
-                    let fx = frac.x.floor();
-                    let fy = frac.y.floor();
-                    let fz = frac.z.floor();
-
-                    let sx = -fx as i32;
-                    let sy = -fy as i32;
-                    let sz = -fz as i32;
-                    let atom_shift = Vector3::new(sx, sy, sz);
-
-                    let s_vec = h_matrix * Vector3::new(-sx as f64, -sy as f64, -sz as f64);
-                    let wrapped_pos = pos - s_vec;
-
-                    let ux = frac.x - fx;
-                    let uy = frac.y - fy;
-                    let uz = frac.z - fz;
-
-                    let bx = ((ux * num_bins.x as f64) as usize).min(num_bins.x - 1);
-                    let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
-                    let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
-
-                    let linear_idx = bx + num_bins.x * (by + num_bins.y * bz);
-                    let rank = bin_ranks[linear_idx];
-                    (rank, wrapped_pos, atom_shift, original_idx)
-                })
-                .collect()
-        };
-
+        // 4. Compute bin counts directly from atom_data
         let mut counts = vec![0; total_bins];
-        for (rank, _, _, _) in &reordered_data {
-            counts[*rank] += 1;
+        for &(_z, original_idx) in &atom_data {
+            let pos = positions[original_idx];
+            let frac = cell.to_fractional(&pos);
+            let ux = frac.x - frac.x.floor();
+            let uy = frac.y - frac.y.floor();
+            let uz = frac.z - frac.z.floor();
+            let bx = ((ux * num_bins.x as f64) as usize).min(num_bins.x - 1);
+            let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
+            let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
+            let linear_idx = bx + num_bins.x * (by + num_bins.y * bz);
+            let rank = bin_ranks[linear_idx];
+            counts[rank] += 1;
         }
 
         let mut cell_starts = vec![0; total_bins + 1];
@@ -131,9 +107,35 @@ impl CellList {
         let mut final_particles = vec![0; n_atoms];
         let mut current_fill = cell_starts.clone();
 
+        // 5. Fill final arrays
         {
             let _s = info_span!("bin_fill").entered();
-            for (rank, wrapped_pos, atom_shift, original_idx) in reordered_data {
+            for &(_z, original_idx) in &atom_data {
+                let pos = positions[original_idx];
+                let frac = cell.to_fractional(&pos);
+                let fx = frac.x.floor();
+                let fy = frac.y.floor();
+                let fz = frac.z.floor();
+
+                let sx = -fx as i32;
+                let sy = -fy as i32;
+                let sz = -fz as i32;
+                let atom_shift = Vector3::new(sx, sy, sz);
+
+                let s_vec = h_matrix * Vector3::new(-sx as f64, -sy as f64, -sz as f64);
+                let wrapped_pos = pos - s_vec;
+
+                let ux = frac.x - fx;
+                let uy = frac.y - fy;
+                let uz = frac.z - fz;
+
+                let bx = ((ux * num_bins.x as f64) as usize).min(num_bins.x - 1);
+                let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
+                let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
+
+                let linear_idx = bx + num_bins.x * (by + num_bins.y * bz);
+                let rank = bin_ranks[linear_idx];
+                
                 let loc = current_fill[rank];
                 final_pos_wrapped[loc] = wrapped_pos;
                 final_atom_shifts[loc] = atom_shift;

@@ -10,7 +10,7 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 use crate::cell::Cell;
 use crate::search::CellList;
 use nalgebra::{Matrix3, Vector3};
-use numpy::{IntoPyArray, PyArrayMethods, PyReadonlyArray2};
+use numpy::{PyArrayMethods, PyReadonlyArray2};
 use pyo3::types::PyDict;
 use tracing_subscriber::EnvFilter;
 
@@ -89,8 +89,8 @@ fn build_neighborlists<'py>(
     let local = PyDict::new(py);
 
     let n_edges = edge_i.len();
-    local.set_item("edge_i", edge_i.into_pyarray(py))?;
-    local.set_item("edge_j", edge_j.into_pyarray(py))?;
+    local.set_item("edge_i", numpy::PyArray1::from_vec(py, edge_i))?;
+    local.set_item("edge_j", numpy::PyArray1::from_vec(py, edge_j))?;
 
     let shifts_arr = numpy::PyArray1::from_vec(py, shifts).reshape((n_edges, 3))?;
     local.set_item("shift", shifts_arr)?;

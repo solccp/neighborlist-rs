@@ -64,6 +64,13 @@ A dictionary containing:
     *   `build_neighborlists_batch` (new implementation).
 *   [x] Verify correctness against serial execution. [0ac2be2]
 
+## Phase 5: Multi-Cutoff Batch Support
+*   [x] Define the `build_neighborlists_batch_multi` function in `lib.rs`. [125e0b0]
+*   [x] Implement fused parallel search over systems for multiple cutoffs. [125e0b0]
+*   [x] Implement multi-cutoff aggregation (mapping cutoffs to concatenated results). [125e0b0]
+*   [x] Add integration tests for batched multi-cutoff. [125e0b0]
+*   [x] Verify correctness against `build_neighborlists_multi`. [125e0b0]
+
 ## Risks & Mitigations
 *   **Memory Usage:** Creating large intermediate vectors for every system might spike memory.
     *   *Mitigation:* Pre-calculate edge counts if possible, or use standard `Vec` and collect. Since we target small/medium systems, memory shouldn't be the bottleneck compared to the graph size itself.

@@ -5,7 +5,7 @@ High-performance neighborlist construction for atomistic systems in Rust with Py
 ## Project Overview
 
 **Purpose:** This library generates neighbor lists for molecular dynamics (MD) and geometric deep learning (GNNs). It is optimized for speed and correctness, handling Periodic Boundary Conditions (PBC) for both orthogonal and triclinic cells.
-**Primary Consumers:** Python/PyTorch-based MLIP (Machine Learning Interatomic Potentials) training and inference pipelines.
+**Primary Consumers:** Python/PyTorch-based MLIP (Machine Learning Interatomic Potentials) training and inference pipelines (e.g., `jmolnet`).
 
 ## Tech Stack
 
@@ -19,16 +19,17 @@ High-performance neighborlist construction for atomistic systems in Rust with Py
 ## Directory Structure
 
 *   `src/`: Rust source code.
-    *   `lib.rs`: PyO3 module definition and Python interface logic.
-    *   `search.rs`: Core cell-list algorithm and neighbor search implementation.
-    *   `cell.rs`: Unit cell handling and wrapping logic.
+    *   `lib.rs`: PyO3 module definition, Python interface logic, and entry points for batched/multi processing.
+    *   `search.rs`: Core cell-list algorithm, parallel kernels, and brute-force fallbacks.
+    *   `cell.rs`: Unit cell handling, MIC logic, and Cartesian/Fractional transformations.
 *   `tests/`: Python integration tests.
-    *   `test_basic.py`: Standard functional tests.
-    *   `comprehensive_benchmark.py`: Performance benchmarking script.
-*   `conductor/`: Project management and design documents.
-    *   `spec.md`: Technical specification and requirements.
-    *   `product.md`: High-level product goals.
-*   `proptest-regressions/`: Saved failing cases for property-based tests.
+    *   `test_basic.py`: Standard functional tests including multi-cutoff verification.
+    *   `test_batch.py`: Rigorous tests for batched processing and mixed PBC/non-PBC batches.
+*   `benchmarks/`: Performance benchmarking suite.
+    *   `batch_bench.py`: Benchmarking batched processing speedups.
+    *   `comprehensive_benchmark.py`: Baseline comparisons against other libraries.
+*   `conductor/`: Project management, track plans, and technical specifications.
+*   `.cargo/config.toml`: Local compilation flags (e.g., `target-cpu=native`).
 
 ## Development Workflow
 
@@ -54,26 +55,33 @@ To develop with the Python bindings active in your current environment:
 # Fast development build (installs directly to current venv)
 maturin develop --release
 ```
-*Note: Using `--release` is highly recommended for neighbor list performance, as debug builds are significantly slower.*
+*Note: Using `--release` is mandatory for performance, especially for large systems or benchmarks.*
 
 **3. Python Tests:**
 ```bash
 # Run standard tests
 pytest tests/
-
-# Run benchmarks
-python tests/comprehensive_benchmark.py
 ```
 
 ## Key Concepts
 
 *   **Cell Lists:** The algorithm partitions the simulation box into bins (cells) larger than the cutoff radius to achieve O(N) complexity.
-*   **PBC (Periodic Boundary Conditions):** Atoms interact across unit cell boundaries. The library computes the "minimum image" convention.
+*   **Multi-Cutoff:** Generate multiple neighbor lists (e.g., for short-range, dispersion, and long-range interactions) in a **single pass** over the structure.
+*   **Batched Processing:** Process a batch of many systems (e.g., 128 molecules) simultaneously in parallel using Rayon, reducing Python/GIL overhead.
+*   **Auto-Box Inference:** Passing `None` for the cell automatically infers a safe bounding box for isolated (non-PBC) systems.
 *   **Shifts:** For PBC, the output includes integer vectors (`shift`) representing the number of cell vectors added to the neighbor's position to bring it within the cutoff distance relative to the central atom.
     *   `r_j_image = r_j + shift * cell_matrix`
 
+## Performance Optimizations
+
+*   **Hardware Acceleration:** Compiled with `target-cpu=native` for optimal instruction set usage.
+*   **Adaptive Strategy:** 
+    *   **Brute Force Fallback:** Automatically uses O(N²) search for systems with $N < 500$ atoms (where it outperforms cell-lists).
+    *   **Serial Fallback:** Automatically disables parallel overhead for tiny systems ($N < 20$ atoms).
+*   **Z-Order Sorting:** Particles are sorted by Z-order (Morton curve) to maximize cache hits during cell traversal.
+
 ## Conventions
 
-*   **Zero-Copy:** The Python bindings are designed to minimize data copying. `build_neighborlists` returns NumPy arrays that take ownership of Rust-allocated memory or write directly into them where possible.
+*   **Zero-Copy:** Returns NumPy arrays that take ownership of Rust-allocated memory or write directly into them to minimize copying.
 *   **Matrix Layout:** Cell matrices are column-major vectors (a, b, c).
-*   **Error Handling:** Invalid inputs (e.g., non-3x3 matrices) return `PyValueError`.
+*   **Error Handling:** Invalid inputs (e.g., non-3x3 matrices, non-invertible cells) return `PyValueError`.

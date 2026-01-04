@@ -103,7 +103,9 @@ print(np.mean(times))
 """
     ]
     res = subprocess.check_output(cmd).decode().strip()
-    return float(res)
+    # The last line should be the mean time
+    last_line = res.splitlines()[-1]
+    return float(last_line)
 
 def run_benchmarks():
     # Define system configurations

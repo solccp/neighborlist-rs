@@ -9,7 +9,7 @@
 ## Phase 2: Spatial Sorting (Cache Locality)
 - [x] Task: Implement Z-order (Morton) index calculation for atom positions 76b7cdf
 - [ ] Task: Refactor `CellList::build` to reorder the `pos_wrapped` and `atom_shifts` arrays based on spatial index
-- [ ] Task: Write tests to verify that spatial reordering doesn't break neighbor indexing
+- [x] Task: Write tests to verify that spatial reordering doesn't break neighbor indexing fa9266b
 - [ ] Task: Verify cache hit rate improvement using `perf stat` or equivalent
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Spatial Sorting (Cache Locality)' (Protocol in workflow.md)
 

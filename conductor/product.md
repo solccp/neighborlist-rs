@@ -22,6 +22,8 @@ To build a high-performance, safe, and deterministic neighborlist construction l
     -   Crystals (PBC) including Triclinic cells.
 -   **Multi-List Generation:**
     -   Simultaneously generate lists for Local (GNN), Dispersion (DFTD3), and Coulomb interactions in a single pass.
+-   **Batched Processing:**
+    -   Efficiently process batches of structures in parallel, maximizing CPU utilization for datasets with many small systems.
 -   **Output:**
     -   Edge indices (`i`, `j`) and Shift vectors (`sx`, `sy`, `sz`).
     -   Configurable directed/undirected edges.

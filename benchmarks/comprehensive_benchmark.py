@@ -54,7 +54,7 @@ print(np.mean(times))
 def run_benchmarks():
     # Define system configurations
     # (Display Name, Filepath)
-    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    data_dir = os.path.join(os.path.dirname(__file__), "../tests/data")
     configs = [
         ("100 (non-PBC)", os.path.join(data_dir, "isolated_100.xyz")),
         ("Two Clusters (non-PBC)", os.path.join(data_dir, "isolated_two_clusters.xyz")),

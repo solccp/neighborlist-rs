@@ -57,6 +57,7 @@ def run_benchmarks():
     data_dir = os.path.join(os.path.dirname(__file__), "data")
     configs = [
         ("100 (non-PBC)", os.path.join(data_dir, "isolated_100.xyz")),
+        ("Two Clusters (non-PBC)", os.path.join(data_dir, "isolated_two_clusters.xyz")),
         ("1,000 (non-PBC)", os.path.join(data_dir, "isolated_1000.xyz")),
         ("10,000 (non-PBC)", os.path.join(data_dir, "isolated_10000.xyz")),
         ("20,000 (non-PBC)", os.path.join(data_dir, "isolated_20000.xyz")),

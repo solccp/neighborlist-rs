@@ -45,6 +45,7 @@ def main():
         ("ethanol_10000", "ethanol", 10000),
         ("ethanol_20000", "ethanol", 20000),
         ("si_bulk", "si_bulk", 8),
+        ("isolated_two_clusters", "isolated_two_clusters", 20),
     ]
 
     for name, dtype, val in configs:
@@ -52,6 +53,18 @@ def main():
         if dtype == "isolated":
             atoms = generate_random_molecule(val)
             # Remove cell info to force plain XYZ format
+            atoms.pbc = False
+            atoms.cell = None
+            filepath = os.path.join(output_dir, f"{name}.xyz")
+            from ase.io import write
+            write(filepath, atoms, format='xyz')
+        elif dtype == "isolated_two_clusters":
+            # Two clusters of 10 atoms each, separated by 10.0 Angstroms
+            atoms1 = generate_random_molecule(10)
+            atoms2 = generate_random_molecule(10)
+            # Shift atoms2 by 10.0 in x
+            atoms2.translate([10.0, 0.0, 0.0])
+            atoms = atoms1 + atoms2
             atoms.pbc = False
             atoms.cell = None
             filepath = os.path.join(output_dir, f"{name}.xyz")

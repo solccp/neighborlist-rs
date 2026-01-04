@@ -95,24 +95,33 @@ fn build_neighborlists<'py>(
         Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
     };
 
-    let cl = CellList::build(&cell_inner, &pos_vec, cutoff);
+    let perp = cell_inner.perpendicular_widths();
+    let min_width = perp.x.min(perp.y).min(perp.z);
+    // Strict inequality to be safe with rounding? <= is typically fine for MIC logic, but < is safer.
+    let mic_safe = cutoff * 2.0 < min_width;
 
-    let (edge_i, edge_j, shifts) = if parallel {
-        cl.par_search_optimized(&cell_inner, cutoff)
+    let (edge_i, edge_j, shifts) = if n_atoms < 500 && mic_safe {
+        search::brute_force_search_full(&cell_inner, &pos_vec, cutoff)
     } else {
-        let neighbors = cl.search(&cell_inner, &pos_vec, cutoff);
-        let n_edges = neighbors.len();
-        let mut ei = Vec::with_capacity(n_edges);
-        let mut ej = Vec::with_capacity(n_edges);
-        let mut s = Vec::with_capacity(n_edges * 3);
-        for (i, j, sx, sy, sz) in neighbors {
-            ei.push(i as i64);
-            ej.push(j as i64);
-            s.push(sx);
-            s.push(sy);
-            s.push(sz);
+        let cl = CellList::build(&cell_inner, &pos_vec, cutoff);
+
+        if parallel {
+            cl.par_search_optimized(&cell_inner, cutoff)
+        } else {
+            let neighbors = cl.search(&cell_inner, &pos_vec, cutoff);
+            let n_edges = neighbors.len();
+            let mut ei = Vec::with_capacity(n_edges);
+            let mut ej = Vec::with_capacity(n_edges);
+            let mut s = Vec::with_capacity(n_edges * 3);
+            for (i, j, sx, sy, sz) in neighbors {
+                ei.push(i as i64);
+                ej.push(j as i64);
+                s.push(sx);
+                s.push(sy);
+                s.push(sz);
+            }
+            (ei, ej, s)
         }
-        (ei, ej, s)
     };
 
     let dict = PyDict::new(py);

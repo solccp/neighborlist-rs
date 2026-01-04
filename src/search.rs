@@ -443,6 +443,34 @@ pub fn brute_force_search(
     neighbors
 }
 
+pub fn brute_force_search_full(
+    cell: &Cell,
+    positions: &[Vector3<f64>],
+    cutoff: f64,
+) -> (Vec<i64>, Vec<i64>, Vec<i32>) {
+    let n = positions.len();
+    let cutoff_sq = cutoff * cutoff;
+    // Estimate capacity: avg 50 neighbors? for small system maybe less.
+    let capacity = n * 10; 
+    let mut edge_i = Vec::with_capacity(capacity);
+    let mut edge_j = Vec::with_capacity(capacity);
+    let mut shifts = Vec::with_capacity(capacity * 3);
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let (shift, disp) = cell.get_shift_and_displacement(&positions[i], &positions[j]);
+            if disp.norm_squared() < cutoff_sq {
+                edge_i.push(i as i64);
+                edge_j.push(j as i64);
+                shifts.push(shift.x);
+                shifts.push(shift.y);
+                shifts.push(shift.z);
+            }
+        }
+    }
+    (edge_i, edge_j, shifts)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

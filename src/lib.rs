@@ -8,6 +8,7 @@ use crate::search::CellList;
 use nalgebra::{Matrix3, Vector3};
 use numpy::{IntoPyArray, PyArrayMethods, PyReadonlyArray2};
 use pyo3::types::PyDict;
+use tracing_subscriber::EnvFilter;
 
 #[pyclass]
 pub struct PyCell {
@@ -109,11 +110,26 @@ fn set_num_threads(n: usize) -> PyResult<()> {
     Ok(())
 }
 
+#[pyfunction]
+fn init_logging(level: Option<String>) {
+    let filter = if let Some(l) = level {
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(l))
+    } else {
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+    };
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+        .with_thread_ids(true)
+        .try_init();
+}
+
 #[pymodule]
 fn neighborlist_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCell>()?;
     m.add_function(wrap_pyfunction!(build_neighborlists, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(set_num_threads, m)?)?;
+    m.add_function(wrap_pyfunction!(init_logging, m)?)?;
     Ok(())
 }

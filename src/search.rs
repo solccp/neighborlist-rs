@@ -1,11 +1,15 @@
 use crate::cell::Cell;
 use nalgebra::Vector3;
 use rayon::prelude::*;
+use tracing::info_span;
 
 pub struct CellList {
+    /// particles[sorted_idx] = original_idx
     particles: Vec<usize>,
     cell_starts: Vec<usize>,
+    /// Wrapped positions in sorted order (index matches sorted_idx).
     pos_wrapped: Vec<Vector3<f64>>,
+    /// Wrapping shifts in sorted order (index matches sorted_idx).
     atom_shifts: Vec<Vector3<i32>>,
     num_bins: Vector3<usize>,
     n_search: Vector3<i32>,
@@ -13,12 +17,37 @@ pub struct CellList {
 
 impl CellList {
     pub fn build(cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> Self {
-        let perp_widths = cell.perpendicular_widths();
+        let _span = info_span!("CellList::build", n_atoms = positions.len()).entered();
+        let n_atoms = positions.len();
 
+        // 1. Compute Z-order indices and original positions in parallel
+        let atom_data: Vec<(u64, usize)> = {
+            let _s = info_span!("compute_z_order").entered();
+            positions
+                .into_par_iter()
+                .enumerate()
+                .map(|(i, pos)| {
+                    let mut frac = cell.to_fractional(pos);
+                    frac.x -= frac.x.floor();
+                    frac.y -= frac.y.floor();
+                    frac.z -= frac.z.floor();
+                    (compute_z_order(&frac), i)
+                })
+                .collect()
+        };
+
+        // 2. Sort atoms spatially
+        let mut atom_data = atom_data;
+        {
+            let _s = info_span!("spatial_sort").entered();
+            atom_data.sort_unstable_by_key(|&(z, _)| z);
+        }
+
+        // 3. Reorder and wrap positions/shifts based on spatial sort
+        let perp_widths = cell.perpendicular_widths();
         let nx = (perp_widths.x / cutoff).floor() as usize;
         let ny = (perp_widths.y / cutoff).floor() as usize;
         let nz = (perp_widths.z / cutoff).floor() as usize;
-
         let num_bins = Vector3::new(nx.max(1), ny.max(1), nz.max(1));
 
         let n_search = Vector3::new(
@@ -27,39 +56,45 @@ impl CellList {
             (cutoff * num_bins.z as f64 / perp_widths.z).ceil() as i32,
         );
 
-        let total_bins = num_bins.x * num_bins.y * num_bins.z;
-        let mut counts = vec![0; total_bins];
-        let mut bin_indices = Vec::with_capacity(positions.len());
-        let mut atom_shifts = Vec::with_capacity(positions.len());
-        let mut pos_wrapped = Vec::with_capacity(positions.len());
-
         let h_matrix = cell.h();
 
-        for pos in positions {
-            let frac = cell.to_fractional(pos);
-            let fx = frac.x.floor();
-            let fy = frac.y.floor();
-            let fz = frac.z.floor();
+        let reordered_data: Vec<(usize, Vector3<f64>, Vector3<i32>, usize)> = {
+            let _s = info_span!("reorder_and_wrap").entered();
+            atom_data
+                .into_par_iter()
+                .map(|(_z, original_idx)| {
+                    let pos = positions[original_idx];
+                    let frac = cell.to_fractional(&pos);
+                    let fx = frac.x.floor();
+                    let fy = frac.y.floor();
+                    let fz = frac.z.floor();
 
-            let sx = -fx as i32;
-            let sy = -fy as i32;
-            let sz = -fz as i32;
-            atom_shifts.push(Vector3::new(sx, sy, sz));
+                    let sx = -fx as i32;
+                    let sy = -fy as i32;
+                    let sz = -fz as i32;
+                    let atom_shift = Vector3::new(sx, sy, sz);
 
-            let s_vec = h_matrix * Vector3::new(-sx as f64, -sy as f64, -sz as f64);
-            pos_wrapped.push(pos - s_vec);
+                    let s_vec = h_matrix * Vector3::new(-sx as f64, -sy as f64, -sz as f64);
+                    let wrapped_pos = pos - s_vec;
 
-            let ux = frac.x - fx;
-            let uy = frac.y - fy;
-            let uz = frac.z - fz;
+                    let ux = frac.x - fx;
+                    let uy = frac.y - fy;
+                    let uz = frac.z - fz;
 
-            let bx = ((ux * num_bins.x as f64) as usize).min(num_bins.x - 1);
-            let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
-            let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
+                    let bx = ((ux * num_bins.x as f64) as usize).min(num_bins.x - 1);
+                    let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
+                    let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
 
-            let bin_idx = bx + num_bins.x * (by + num_bins.y * bz);
-            counts[bin_idx] += 1;
-            bin_indices.push(bin_idx);
+                    let bin_idx = bx + num_bins.x * (by + num_bins.y * bz);
+                    (bin_idx, wrapped_pos, atom_shift, original_idx)
+                })
+                .collect()
+        };
+
+        let total_bins = num_bins.x * num_bins.y * num_bins.z;
+        let mut counts = vec![0; total_bins];
+        for (bin_idx, _, _, _) in &reordered_data {
+            counts[*bin_idx] += 1;
         }
 
         let mut cell_starts = vec![0; total_bins + 1];
@@ -70,20 +105,27 @@ impl CellList {
         }
         cell_starts[total_bins] = accum;
 
-        let mut particles = vec![0; positions.len()];
+        let mut final_pos_wrapped = vec![Vector3::zeros(); n_atoms];
+        let mut final_atom_shifts = vec![Vector3::zeros(); n_atoms];
+        let mut final_particles = vec![0; n_atoms];
         let mut current_fill = cell_starts.clone();
 
-        for (i, &bin_idx) in bin_indices.iter().enumerate() {
-            let loc = current_fill[bin_idx];
-            particles[loc] = i;
-            current_fill[bin_idx] += 1;
+        {
+            let _s = info_span!("bin_fill").entered();
+            for (bin_idx, wrapped_pos, atom_shift, original_idx) in reordered_data {
+                let loc = current_fill[bin_idx];
+                final_pos_wrapped[loc] = wrapped_pos;
+                final_atom_shifts[loc] = atom_shift;
+                final_particles[loc] = original_idx;
+                current_fill[bin_idx] += 1;
+            }
         }
 
         Self {
-            particles,
+            particles: final_particles,
             cell_starts,
-            pos_wrapped,
-            atom_shifts,
+            pos_wrapped: final_pos_wrapped,
+            atom_shifts: final_atom_shifts,
             num_bins,
             n_search,
         }
@@ -103,9 +145,9 @@ impl CellList {
         _positions: &[Vector3<f64>],
         cutoff: f64,
     ) -> Vec<(usize, usize, i32, i32, i32)> {
-        let mut neighbors = Vec::new();
         let cutoff_sq = cutoff * cutoff;
-        let n_atoms = self.pos_wrapped.len();
+        let n_atoms = self.particles.len();
+        let mut neighbors = Vec::new();
 
         for i in 0..n_atoms {
             self.search_atom_neighbors(i, cell, cutoff_sq, &mut neighbors);
@@ -114,13 +156,17 @@ impl CellList {
     }
 
     pub fn par_search_optimized(&self, cell: &Cell, cutoff: f64) -> (Vec<i64>, Vec<i64>, Vec<i32>) {
+        let _span = info_span!("CellList::par_search_optimized").entered();
         let cutoff_sq = cutoff * cutoff;
-        let n_atoms = self.pos_wrapped.len();
+        let n_atoms = self.particles.len();
 
-        let counts: Vec<usize> = (0..n_atoms)
-            .into_par_iter()
-            .map(|i| self.count_atom_neighbors(i, cell, cutoff_sq))
-            .collect();
+        let counts: Vec<usize> = {
+            let _s = info_span!("count_pass").entered();
+            (0..n_atoms)
+                .into_par_iter()
+                .map(|i| self.count_atom_neighbors(i, cell, cutoff_sq))
+                .collect()
+        };
 
         let mut offsets = vec![0; n_atoms + 1];
         let mut total = 0;
@@ -138,22 +184,24 @@ impl CellList {
         let edge_j_ptr = edge_j.as_mut_ptr() as usize;
         let shifts_ptr = shifts.as_mut_ptr() as usize;
 
-        (0..n_atoms).into_par_iter().for_each(|i| {
-            let offset = offsets[i];
-            unsafe {
-                let ei = std::slice::from_raw_parts_mut(edge_i_ptr as *mut i64, total);
-                let ej = std::slice::from_raw_parts_mut(edge_j_ptr as *mut i64, total);
-                let s = std::slice::from_raw_parts_mut(shifts_ptr as *mut i32, total * 3);
+        {
+            let _s = info_span!("fill_pass").entered();
+            (0..n_atoms).into_par_iter().for_each(|i| {
+                let offset = offsets[i];
+                unsafe {
+                    let ei = std::slice::from_raw_parts_mut(edge_i_ptr as *mut i64, total);
+                    let ej = std::slice::from_raw_parts_mut(edge_j_ptr as *mut i64, total);
+                    let s = std::slice::from_raw_parts_mut(shifts_ptr as *mut i32, total * 3);
 
-                self.fill_atom_neighbors(i, cell, cutoff_sq, offset, ei, ej, s);
-            }
-        });
+                    self.fill_atom_neighbors(i, cell, cutoff_sq, offset, ei, ej, s);
+                }
+            });
+        }
 
         (edge_i, edge_j, shifts)
     }
 
     fn count_atom_neighbors(&self, i: usize, cell: &Cell, cutoff_sq: f64) -> usize {
-        let mut count = 0;
         let pos_i_w = self.pos_wrapped[i];
         let h_matrix = cell.h();
 
@@ -162,6 +210,9 @@ impl CellList {
         let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
         let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
 
+        let i_orig = self.particles[i];
+
+        let mut count = 0;
         for dx in -self.n_search.x..=self.n_search.x {
             for dy in -self.n_search.y..=self.n_search.y {
                 for dz in -self.n_search.z..=self.n_search.z {
@@ -170,20 +221,21 @@ impl CellList {
                     let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
 
                     let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
-                    let atoms_j = &self.particles
-                        [self.cell_starts[bin_j_idx]..self.cell_starts[bin_j_idx + 1]];
-                    if atoms_j.is_empty() {
+                    let start_j = self.cell_starts[bin_j_idx];
+                    let end_j = self.cell_starts[bin_j_idx + 1];
+
+                    if start_j == end_j {
                         continue;
                     }
 
-                    let s_bin = Vector3::new(sx as f64, sy as f64, sz as f64);
-                    let offset_vec = h_matrix * s_bin;
+                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
 
-                    for &j in atoms_j {
-                        if i >= j {
+                    for sorted_idx_j in start_j..end_j {
+                        let j_orig = self.particles[sorted_idx_j];
+                        if i_orig >= j_orig {
                             continue;
                         }
-                        let disp = (self.pos_wrapped[j] - pos_i_w) + offset_vec;
+                        let disp: Vector3<f64> = (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
                         if disp.norm_squared() < cutoff_sq {
                             count += 1;
                         }
@@ -213,6 +265,8 @@ impl CellList {
         let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
         let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
 
+        let i_orig = self.particles[i];
+
         for dx in -self.n_search.x..=self.n_search.x {
             for dy in -self.n_search.y..=self.n_search.y {
                 for dz in -self.n_search.z..=self.n_search.z {
@@ -221,25 +275,26 @@ impl CellList {
                     let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
 
                     let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
-                    let atoms_j = &self.particles
-                        [self.cell_starts[bin_j_idx]..self.cell_starts[bin_j_idx + 1]];
-                    if atoms_j.is_empty() {
+                    let start_j = self.cell_starts[bin_j_idx];
+                    let end_j = self.cell_starts[bin_j_idx + 1];
+
+                    if start_j == end_j {
                         continue;
                     }
 
-                    let s_bin = Vector3::new(sx as f64, sy as f64, sz as f64);
-                    let offset_vec = h_matrix * s_bin;
+                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
 
-                    for &j in atoms_j {
-                        if i >= j {
+                    for sorted_idx_j in start_j..end_j {
+                        let j_orig = self.particles[sorted_idx_j];
+                        if i_orig >= j_orig {
                             continue;
                         }
-                        let disp = (self.pos_wrapped[j] - pos_i_w) + offset_vec;
+                        let disp: Vector3<f64> = (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
                         if disp.norm_squared() < cutoff_sq {
-                            edge_i[offset] = i as i64;
-                            edge_j[offset] = j as i64;
+                            edge_i[offset] = i_orig as i64;
+                            edge_j[offset] = j_orig as i64;
 
-                            let s_j = self.atom_shifts[j];
+                            let s_j = self.atom_shifts[sorted_idx_j];
                             shifts[offset * 3] = s_j.x - s_i.x + sx;
                             shifts[offset * 3 + 1] = s_j.y - s_i.y + sy;
                             shifts[offset * 3 + 2] = s_j.z - s_i.z + sz;
@@ -268,6 +323,8 @@ impl CellList {
         let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
         let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
 
+        let i_orig = self.particles[i];
+
         for dx in -self.n_search.x..=self.n_search.x {
             for dy in -self.n_search.y..=self.n_search.y {
                 for dz in -self.n_search.z..=self.n_search.z {
@@ -276,28 +333,28 @@ impl CellList {
                     let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
 
                     let bin_j_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
-                    let atoms_j = &self.particles
-                        [self.cell_starts[bin_j_idx]..self.cell_starts[bin_j_idx + 1]];
-                    if atoms_j.is_empty() {
+                    let start_j = self.cell_starts[bin_j_idx];
+                    let end_j = self.cell_starts[bin_j_idx + 1];
+
+                    if start_j == end_j {
                         continue;
                     }
 
-                    let s_bin = Vector3::new(sx as f64, sy as f64, sz as f64);
-                    let offset_vec = h_matrix * s_bin;
+                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
 
-                    for &j in atoms_j {
-                        if i >= j {
+                    for sorted_idx_j in start_j..end_j {
+                        let j_orig = self.particles[sorted_idx_j];
+                        if i_orig >= j_orig {
                             continue;
                         }
-                        let pos_j_w = self.pos_wrapped[j];
-                        let disp = (pos_j_w - pos_i_w) + offset_vec;
+                        let disp: Vector3<f64> = (self.pos_wrapped[sorted_idx_j] - pos_i_w) + offset_vec;
 
                         if disp.norm_squared() < cutoff_sq {
-                            let s_j = self.atom_shifts[j];
+                            let s_j = self.atom_shifts[sorted_idx_j];
                             let s_total_x = s_j.x - s_i.x + sx;
                             let s_total_y = s_j.y - s_i.y + sy;
                             let s_total_z = s_j.z - s_i.z + sz;
-                            neighbors.push((i, j, s_total_x, s_total_y, s_total_z));
+                            neighbors.push((i_orig, j_orig, s_total_x, s_total_y, s_total_z));
                         }
                     }
                 }
@@ -310,6 +367,25 @@ fn div_mod(val: i32, max: i32) -> (usize, i32) {
     let rem = val.rem_euclid(max);
     let shift = val.div_euclid(max);
     (rem as usize, shift)
+}
+
+/// Computes a 64-bit Morton (Z-order) index for fractional coordinates [0, 1).
+fn compute_z_order(frac: &Vector3<f64>) -> u64 {
+    let x = (frac.x.clamp(0.0, 0.999999) * (1u64 << 21) as f64) as u64;
+    let y = (frac.y.clamp(0.0, 0.999999) * (1u64 << 21) as f64) as u64;
+    let z = (frac.z.clamp(0.0, 0.999999) * (1u64 << 21) as f64) as u64;
+
+    interleave_3(x) | (interleave_3(y) << 1) | (interleave_3(z) << 2)
+}
+
+fn interleave_3(mut x: u64) -> u64 {
+    x &= 0x1fffff;
+    x = (x | x << 32) & 0x1f00000000ffffu64;
+    x = (x | x << 16) & 0x1f0000ff0000ffu64;
+    x = (x | x << 8) & 0x100f00f00f00f00fu64;
+    x = (x | x << 4) & 0x10c30c30c30c30c3u64;
+    x = (x | x << 2) & 0x1249249249249249u64;
+    x
 }
 
 pub fn brute_force_search(

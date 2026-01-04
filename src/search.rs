@@ -414,6 +414,25 @@ mod tests {
     use nalgebra::Matrix3;
 
     #[test]
+    fn test_z_order_calculation() {
+        let p1 = Vector3::new(0.1, 0.1, 0.1);
+        let p2 = Vector3::new(0.1, 0.1, 0.11);
+        let p3 = Vector3::new(0.9, 0.9, 0.9);
+
+        let z1 = compute_z_order(&p1);
+        let z2 = compute_z_order(&p2);
+        let z3 = compute_z_order(&p3);
+
+        assert!(z1 < z2);
+        assert!(z2 < z3);
+        
+        // Test clamping
+        let p_out = Vector3::new(1.1, -0.1, 0.5);
+        let z_out = compute_z_order(&p_out);
+        assert!(z_out > 0);
+    }
+
+    #[test]
     fn test_brute_force_reference() {
         let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
         let cell = Cell::new(h).unwrap();

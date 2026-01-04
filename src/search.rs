@@ -184,11 +184,18 @@ impl CellList {
         let _span = info_span!("CellList::par_search_optimized").entered();
         let cutoff_sq = cutoff * cutoff;
         let n_atoms = self.particles.len();
+        
+        // Adaptive chunk sizing for better load balancing.
+        // Aim for at least 64 tasks per thread to allow work-stealing to be effective
+        // without creating too much overhead for small systems.
+        let num_threads = rayon::current_num_threads();
+        let min_len = (n_atoms / (num_threads * 64)).max(1);
 
         let counts: Vec<u32> = {
             let _s = info_span!("count_pass").entered();
             (0..n_atoms)
                 .into_par_iter()
+                .with_min_len(min_len)
                 .map(|i| self.count_atom_neighbors(i, cell, cutoff_sq) as u32)
                 .collect()
         };
@@ -211,7 +218,7 @@ impl CellList {
 
         {
             let _s = info_span!("fill_pass").entered();
-            (0..n_atoms).into_par_iter().for_each(|i| {
+            (0..n_atoms).into_par_iter().with_min_len(min_len).for_each(|i| {
                 let offset = offsets[i];
                 unsafe {
                     let ei = std::slice::from_raw_parts_mut(edge_i_ptr as *mut i64, total);

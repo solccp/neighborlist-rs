@@ -27,6 +27,6 @@
 
 ## Phase 5: Final Validation
 - [x] Task: Run full `proptest` suite with high iteration count (1000+) to ensure robustness c485462
-- [~] Task: Final comparison against `vesin` across all cutoffs (6.0, 14.0, 20.0)
-- [ ] Task: Update `README.md` with new performance metrics and scaling charts
-- [ ] Task: Conductor - User Manual Verification 'Phase 5: Final Validation' (Protocol in workflow.md)
+- [x] Task: Final comparison against `vesin` across all cutoffs (6.0, 14.0, 20.0) f77c87f
+- [x] Task: Update `README.md` with new performance metrics and scaling charts 4328150
+- [~] Task: Conductor - User Manual Verification 'Phase 5: Final Validation' (Protocol in workflow.md)

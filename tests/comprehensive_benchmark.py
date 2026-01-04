@@ -170,7 +170,7 @@ def run_benchmarks():
             print(f"{name:<30} | {'neighborlist-rs':<15} | {'1':<5} | {t1*1000:<10.2f}")
             
             # neighborlist-rs (20 CPUs)
-            n_cpus = min(20, psutil.cpu_count(logical=True))
+            n_cpus = min(8, psutil.cpu_count(logical=True))
             t20 = benchmark_neighborlist_rs_worker(dtype, val, cutoff, n_cpus)
             print(f"{name:<30} | {'neighborlist-rs':<15} | {n_cpus:<5} | {t20*1000:<10.2f}")
             print("-" * 80)

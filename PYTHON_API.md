@@ -84,8 +84,16 @@ cutoffs = [5.0, 10.0]
 results = neighborlist_rs.build_multi_from_ase(atoms, cutoffs)
 
 for i, rc in enumerate(cutoffs):
-    edges = results[i]["local"]
-    print(f"Cutoff {rc}: {len(edges['edge_i'])} pairs")
+    edge_index = results[i]["edge_index"]
+    print(f"Cutoff {rc}: {edge_index.shape[1]} pairs")
+```
+
+With labels:
+```python
+results = neighborlist_rs.build_multi_from_ase(
+    atoms, cutoffs, labels=["short", "long"]
+)
+short_edges = results["short"]["edge_index"]
 ```
 
 ### Multi-Cutoff Search
@@ -97,8 +105,17 @@ results = neighborlist_rs.build_neighborlists_multi(cell, positions, cutoffs)
 
 # Access results by index (order of cutoffs)
 for i, rc in enumerate(cutoffs):
-    edges = results[i]["local"]
-    print(f"Cutoff {rc}A: {len(edges['edge_i'])} edges")
+    edge_index = results[i]["edge_index"]  # Shape (2, N)
+    print(f"Cutoff {rc}A: {edge_index.shape[1]} edges")
+```
+
+You can also pass `labels` to get a dictionary keyed by string labels instead of indices:
+
+```python
+labels = ["short", "medium", "long"]
+results = neighborlist_rs.build_neighborlists_multi(cell, positions, cutoffs, labels=labels)
+
+short_edges = results["short"]["edge_index"]
 ```
 
 ---
@@ -129,9 +146,20 @@ results = neighborlist_rs.build_neighborlists_batch_multi(
     positions, batch, cells=cells, cutoffs=cutoffs
 )
 
-# Returns: { 0: {"local": ...}, 1: {"local": ...} }
-mlp_edges = results[0]["local"]
-dispersion_edges = results[1]["local"]
+# Returns: { 0: {"edge_index": (2, N), "shift": (N, 3)}, ... }
+mlp_edges = results[0]["edge_index"]
+dispersion_edges = results[1]["edge_index"]
+```
+
+With labels:
+```python
+labels = ["mlp", "dispersion"]
+results = neighborlist_rs.build_neighborlists_batch_multi(
+    positions, batch, cells=cells, cutoffs=cutoffs, labels=labels
+)
+
+# Returns: { "mlp": {"edge_index": ...}, "dispersion": {"edge_index": ...} }
+mlp_edges = results["mlp"]["edge_index"]
 ```
 
 *Note: In batched mode, if `cells[i]` is a zero-matrix, system `i` is treated as non-PBC with auto-box inference.*

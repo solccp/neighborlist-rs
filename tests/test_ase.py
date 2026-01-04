@@ -114,6 +114,6 @@ def test_ase_multi_cutoff():
     assert 1 in res
     
     # 2.0 (index 0) is smaller than NN distance (2.55), so 0 edges
-    assert len(res[0]["local"]["edge_i"]) == 0
+    assert res[0]["edge_index"].shape[1] == 0
     # 3.0 (index 1) is larger than NN distance, so many edges
-    assert len(res[1]["local"]["edge_i"]) > 0
+    assert res[1]["edge_index"].shape[1] > 0

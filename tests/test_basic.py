@@ -140,24 +140,32 @@ def test_build_neighborlists_multi():
     assert 1 in result
     
     # Cutoff 2.0 (index 0): only (0, 1)
-    res2 = result[0]["local"]
-    assert len(res2["edge_i"]) == 1
-    assert res2["edge_i"][0] == 0
-    assert res2["edge_j"][0] == 1
+    res2 = result[0]
+    assert "edge_index" in res2
+    ei2 = res2["edge_index"]
+    assert ei2.shape == (2, 1)
+    assert ei2[0, 0] == 0
+    assert ei2[1, 0] == 1
     
     # Cutoff 5.0 (index 1): (0, 1) and (0, 2) and (1, 2)
     # (1, 2) distance is 3.0
-    res5 = result[1]["local"]
-    assert len(res5["edge_i"]) == 3
+    res5 = result[1]
+    assert res5["edge_index"].shape == (2, 3)
     
     # Verify correctness against single calls
     for i, r in enumerate(cutoffs):
         single = neighborlist_rs.build_neighborlists(cell, positions, r)["local"]
-        multi = result[i]["local"]
+        multi = result[i]
         
         # Sort for comparison
         si, sj = single["edge_i"], single["edge_j"]
-        mi, mj = multi["edge_i"], multi["edge_j"]
+        mi, mj = multi["edge_index"][0], multi["edge_index"][1]
+        
+        ks = np.lexsort((sj, si))
+        km = np.lexsort((mj, mi))
+        
+        np.testing.assert_array_equal(si[ks], mi[km])
+        np.testing.assert_array_equal(sj[ks], mj[km])
         
         ks = np.lexsort((sj, si))
         km = np.lexsort((mj, mi))

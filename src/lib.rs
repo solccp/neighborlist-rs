@@ -221,23 +221,25 @@ fn build_from_ase<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (atoms, cutoffs))]
+#[pyo3(signature = (atoms, cutoffs, labels=None))]
 fn build_multi_from_ase<'py>(
     py: Python<'py>,
     atoms: &Bound<'py, PyAny>,
     cutoffs: Vec<f64>,
+    labels: Option<Vec<String>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let (positions, py_cell) = extract_ase_data(atoms)?;
-    build_neighborlists_multi(py, py_cell.as_ref(), positions, cutoffs)
+    build_neighborlists_multi(py, py_cell.as_ref(), positions, cutoffs, labels)
 }
 
 #[pyfunction]
-#[pyo3(signature = (cell, positions, cutoffs))]
+#[pyo3(signature = (cell, positions, cutoffs, labels=None))]
 fn build_neighborlists_multi<'py>(
     py: Python<'py>,
     cell: Option<&PyCell>,
     positions: PyReadonlyArray2<'_, f64>,
     cutoffs: Vec<f64>,
+    labels: Option<Vec<String>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let pos_view = positions.as_array();
     let n_atoms = pos_view.shape()[0];
@@ -248,6 +250,13 @@ fn build_neighborlists_multi<'py>(
     }
     if cutoffs.is_empty() {
         return Ok(PyDict::new(py));
+    }
+    if let Some(ref l) = labels {
+        if l.len() != cutoffs.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Length of labels must match length of cutoffs",
+            ));
+        }
     }
 
     let mut pos_vec = Vec::with_capacity(n_atoms);
@@ -307,19 +316,23 @@ fn build_neighborlists_multi<'py>(
     };
 
     let result_dict = PyDict::new(py);
-    for (k, (edge_i, edge_j, shifts)) in results.into_iter().enumerate() {
+    for (k, (mut edge_i, edge_j, shifts)) in results.into_iter().enumerate() {
         let cutoff_entry = PyDict::new(py);
-        let local = PyDict::new(py);
         let n_edges = edge_i.len();
 
-        local.set_item("edge_i", numpy::PyArray1::from_vec(py, edge_i))?;
-        local.set_item("edge_j", numpy::PyArray1::from_vec(py, edge_j))?;
+        // Create (2, N) edge_index
+        edge_i.extend(edge_j);
+        let edge_index = numpy::PyArray1::from_vec(py, edge_i).reshape((2, n_edges))?;
+        cutoff_entry.set_item("edge_index", edge_index)?;
 
         let shifts_arr = numpy::PyArray1::from_vec(py, shifts).reshape((n_edges, 3))?;
-        local.set_item("shift", shifts_arr)?;
+        cutoff_entry.set_item("shift", shifts_arr)?;
 
-        cutoff_entry.set_item("local", local)?;
-        result_dict.set_item(k, cutoff_entry)?;
+        if let Some(ref l) = labels {
+            result_dict.set_item(&l[k], cutoff_entry)?;
+        } else {
+            result_dict.set_item(k, cutoff_entry)?;
+        }
     }
 
     Ok(result_dict)
@@ -528,13 +541,14 @@ fn build_neighborlists_batch<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (positions, batch, cells=None, cutoffs=vec![5.0]))]
+#[pyo3(signature = (positions, batch, cells=None, cutoffs=vec![5.0], labels=None))]
 fn build_neighborlists_batch_multi<'py>(
     py: Python<'py>,
     positions: PyReadonlyArray2<'_, f64>,
     batch: PyReadonlyArray1<'_, i32>,
     cells: Option<PyReadonlyArray3<'_, f64>>,
     cutoffs: Vec<f64>,
+    labels: Option<Vec<String>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let pos_view = positions.as_array();
     let batch_view = batch.as_array();
@@ -548,6 +562,14 @@ fn build_neighborlists_batch_multi<'py>(
 
     if n_total == 0 || cutoffs.is_empty() {
         return Ok(PyDict::new(py));
+    }
+
+    if let Some(ref l) = labels {
+        if l.len() != cutoffs.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Length of labels must match length of cutoffs",
+            ));
+        }
     }
 
     // 1. Determine system boundaries
@@ -704,15 +726,22 @@ fn build_neighborlists_batch_multi<'py>(
         }
 
         let cutoff_entry = PyDict::new(py);
-        let local = PyDict::new(py);
-        local.set_item("edge_i", numpy::PyArray1::from_vec(py, final_edge_i))?;
-        local.set_item("edge_j", numpy::PyArray1::from_vec(py, final_edge_j))?;
-        local.set_item(
+        
+        // Create (2, N) edge_index
+        final_edge_i.extend(final_edge_j);
+        let edge_index = numpy::PyArray1::from_vec(py, final_edge_i).reshape((2, total_edges))?;
+        cutoff_entry.set_item("edge_index", edge_index)?;
+
+        cutoff_entry.set_item(
             "shift",
             numpy::PyArray1::from_vec(py, final_shift).reshape((total_edges, 3))?,
         )?;
-        cutoff_entry.set_item("local", local)?;
-        result_dict.set_item(k, cutoff_entry)?;
+
+        if let Some(ref l) = labels {
+            result_dict.set_item(&l[k], cutoff_entry)?;
+        } else {
+            result_dict.set_item(k, cutoff_entry)?;
+        }
     }
 
     Ok(result_dict)

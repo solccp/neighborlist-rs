@@ -46,19 +46,19 @@ def test_build_neighborlists_batch_multi():
     # This should fail initially
     result = neighborlist_rs.build_neighborlists_batch_multi(positions, batch, cutoffs=cutoffs)
     
-    assert 2.0 in result
-    assert 4.0 in result
+    assert 0 in result
+    assert 1 in result
     
     # 2.0A: Only system 1 pair (0, 1)
-    res2 = result[2.0]["local"]
-    assert len(res2["edge_i"]) == 1
-    assert res2["edge_i"][0] == 0
-    assert res2["edge_j"][0] == 1
+    res2 = result[0]
+    assert res2["edge_index"].shape == (2, 1)
+    assert res2["edge_index"][0, 0] == 0
+    assert res2["edge_index"][1, 0] == 1
     
     # 4.0A: System 1 pair (0, 1) and System 2 pair (2, 3)
-    res4 = result[4.0]["local"]
-    assert len(res4["edge_i"]) == 2
-    pairs4 = sorted(zip(res4["edge_i"], res4["edge_j"]))
+    res4 = result[1]
+    assert res4["edge_index"].shape == (2, 2)
+    pairs4 = sorted(zip(res4["edge_index"][0], res4["edge_index"][1]))
     assert pairs4 == [(0, 1), (2, 3)]
 
 def test_build_neighborlists_batch_multi_pbc():
@@ -88,7 +88,7 @@ def test_build_neighborlists_batch_multi_pbc():
     result = neighborlist_rs.build_neighborlists_batch_multi(positions, batch, cells=cells, cutoffs=cutoffs)
     
     # Verify against single calls
-    for r in cutoffs:
+    for i, r in enumerate(cutoffs):
         # System 1 single
         res1 = neighborlist_rs.build_neighborlists(neighborlist_rs.PyCell(cells[0].T.tolist()), pos1, r)["local"]
         # System 2 single
@@ -99,8 +99,8 @@ def test_build_neighborlists_batch_multi_pbc():
         expected_j = np.concatenate([res1["edge_j"], res2["edge_j"] + len(pos1)])
         
         # RS result
-        actual_i = result[r]["local"]["edge_i"]
-        actual_j = result[r]["local"]["edge_j"]
+        actual_i = result[i]["edge_index"][0]
+        actual_j = result[i]["edge_index"][1]
         
         # Compare unique pairs
         p_exp = set((min(u, v), max(u, v)) for u, v in zip(expected_i, expected_j))

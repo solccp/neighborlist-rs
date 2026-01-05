@@ -3,19 +3,34 @@
 ## Overview
 This track aims to improve the codebase across three main dimensions:
 1. **Correctness & Safety**: Eliminating Undefined Behavior (UB) in parallel kernels.
-2. **Performance**: Implementing zero-copy position handling and exploring SIMD optimizations.
-3. **Ergonomics**: Improving the Python API with better debugging tools and type safety.
+2. **Performance**: Implementing zero-copy position handling, reducing allocations, and exploring SIMD optimizations.
+3. **Robustness**: Adding rigorous input validation and expanding test coverage.
+4. **Ergonomics**: Improving the Python API and supporting broader use-cases (Mixed PBC).
 
 ## Phase 1: Correctness & Safety
 - [x] **Fix Undefined Behavior in Parallel Kernels**: Refactor `src/search.rs` to avoid overlapping mutable slices. Use raw pointers or `Sync` safe wrappers.
 - [x] **Audit Safety Blocks**: Ensure all `unsafe` blocks are documented with `SAFETY` comments and follow Rust's safety guidelines.
 
 ## Phase 2: Performance Optimizations
-- [ ] **Zero-Copy Positions**: Use `bytemuck` to cast NumPy position arrays directly to `&[Vector3<f64>]` or `&[[f64; 3]]` to eliminate the $O(N)$ copy in `src/lib.rs`.
+- [x] **Zero-Copy Positions**: Use `bytemuck` to cast NumPy position arrays directly to `&[Vector3<f64>]` or `&[[f64; 3]]` to eliminate the $O(N)$ copy in `src/lib.rs`. [5d2ad5b]
+- [ ] **Remove Hot-Path Allocations**: Precompute offset tuples in `CellList` or use stack-bounded `ArrayVec` in `src/search.rs` to eliminate repeated `Vec` allocations during neighbor search.
 - [ ] **Inner-Loop SIMD**: Implement an explicit SIMD kernel for the distance-squared calculation using the `wide` crate.
 - [ ] **Benchmarking Verification**: Verify speedups using `benchmarks/scaling.py`.
 
-## Phase 3: Ergonomics and Type Safety
+## Phase 3: Validation & Robustness
+- [ ] **Input Validation**:
+    - [ ] Enforce `(N, 3)` shape for positions in batch bindings (`src/lib.rs`).
+    - [ ] Validate `cutoff` is finite and positive.
+    - [ ] Validate batch IDs are sorted/monotonic or handle unsorted input.
+- [ ] **Edge Cases & Testing**:
+    - [ ] Add unit tests for invalid cutoffs and unsorted batch IDs.
+    - [ ] **ASE PBC Validation**: Enable and fix ASE PBC path tests to ensure `build_from_ase` handles transposes correctly.
+    - [ ] **Dtype Alignment**: Align `edge_index` documentation with implementation (decide on `int64` vs `uint64`).
+
+## Phase 4: Ergonomics & Features
 - [ ] **Python Repr**: Add `__repr__` to `PyCell` for informative Python debugging.
-- [ ] **ASE Factory Method**: Implement `PyCell.from_ase(atoms)` to streamline cell creation from ASE objects.
+- [ ] **ASE Integration**:
+    - [ ] `PyCell.from_ase(atoms)`: Implement factory method.
+    - [ ] Support Mixed PBC in ASE conversion.
+- [ ] **Mixed PBC Support**: Extend `Cell` and `CellList` to handle periodic and non-periodic dimensions independently.
 - [ ] **Python Type Stubs**: Generate a `neighborlist_rs.pyi` file for IDE autocompletion and static type checking.

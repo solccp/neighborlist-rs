@@ -1,0 +1,13 @@
+{
+    "batch_size": 128,
+    "avg_atoms_per_system": 42.0,
+    "total_atoms": 5376,
+    "cutoff": 6.0,
+    "results_ms": {
+        "neighborlist-rs (8 CPU)": 0.24,
+        "neighborlist-rs (1 CPU)": 0.26,
+        "torch_cluster.radius_graph": 1.98,
+        "vesin (serial loop)": 2.03,
+        "torch-nl": 66.71
+    }
+}

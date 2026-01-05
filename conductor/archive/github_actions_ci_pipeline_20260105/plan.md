@@ -18,6 +18,7 @@
 - [x] Task: Add macOS (arm64) support to the matrix. [4c7a3df]
 - [x] Task: Add Windows (amd64) support to the matrix. [4c7a3df]
 - [x] Task: Add Ubuntu (arm64) support (using `maturin-action`'s cross-compilation or specialized runners). [4c7a3df]
+- [x] Task: Explicitly add native Ubuntu arm64 runners to the matrix. [d406f30]
 - [x] Task: Verify successful builds across the entire OS/Python matrix. [4c7a3df]
 - [ ] Task: Conductor - User Manual Verification 'Cross-Platform Expansion' (Protocol in workflow.md)
 

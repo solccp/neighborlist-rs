@@ -13,7 +13,10 @@ def test_batch_position_shape_validation():
         neighborlist_rs.build_neighborlists_batch(positions, batch, None, cutoff)
 
     with pytest.raises(ValueError, match=r"Positions must be \(N, 3\)"):
-        neighborlist_rs.build_neighborlists_batch_multi(positions, batch, None, [cutoff])
+        neighborlist_rs.build_neighborlists_batch_multi(
+            positions, batch, None, [cutoff]
+        )
+
 
 def test_single_position_shape_validation():
     # N=10, D=4 (Invalid)

@@ -18,7 +18,7 @@
 - [x] Task: Implement `build.rs` for compile-time auto-tuning of thresholds (Brute Force, Parallel, and Stack). [1573576]
 - [x] Task: Conductor - User Manual Verification 'Memory & Threshold Optimization' (Protocol in workflow.md) [1573576]
 
-## Phase 4: Final Verification
-- [x] Task: Run `benchmarks/comprehensive_benchmark.py` and verify `neighborlist-rs` < `vesin` for the 100 and 1000 atom cases. [1573576]
-- [~] Task: Audit `src/lib.rs` for any remaining redundant allocations in the non-PBC path.
-- [~] Task: Conductor - User Manual Verification 'Final Verification' (Protocol in workflow.md)
+## Phase 4: Final Verification [checkpoint: 222aa9e]
+- [x] Task: Run `benchmarks/comprehensive_benchmark.py` and verify `neighborlist-rs` < `vesin` for the 100 and 1000 atom cases. [222aa9e]
+- [x] Task: Audit `src/lib.rs` for any remaining redundant allocations in the non-PBC path. [222aa9e]
+- [x] Task: Conductor - User Manual Verification 'Final Verification' (Protocol in workflow.md) [222aa9e]

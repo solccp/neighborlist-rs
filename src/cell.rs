@@ -53,9 +53,21 @@ impl Cell {
     pub fn wrap(&self, cart: &Vector3<f64>) -> Vector3<f64> {
         let frac = self.to_fractional(cart);
         let wrapped_frac = Vector3::new(
-            if self.pbc.x { frac.x - frac.x.floor() } else { frac.x },
-            if self.pbc.y { frac.y - frac.y.floor() } else { frac.y },
-            if self.pbc.z { frac.z - frac.z.floor() } else { frac.z },
+            if self.pbc.x {
+                frac.x - frac.x.floor()
+            } else {
+                frac.x
+            },
+            if self.pbc.y {
+                frac.y - frac.y.floor()
+            } else {
+                frac.y
+            },
+            if self.pbc.z {
+                frac.z - frac.z.floor()
+            } else {
+                frac.z
+            },
         );
         self.to_cartesian(&wrapped_frac)
     }

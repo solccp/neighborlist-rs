@@ -17,7 +17,6 @@ pub fn search_single(
         return Ok((vec![], vec![], vec![]));
     }
 
-
     let cell_inner = if let Some((h_mat, pbc)) = cell {
         Cell::new(h_mat, pbc).map_err(|e| e.to_string())?
     } else {
@@ -64,7 +63,11 @@ pub fn search_single(
     let mic_safe = cutoff * 2.0 < min_width;
 
     if n_atoms < BRUTE_FORCE_THRESHOLD && mic_safe {
-        Ok(search::brute_force_search_full(&cell_inner, positions, cutoff))
+        Ok(search::brute_force_search_full(
+            &cell_inner,
+            positions,
+            cutoff,
+        ))
     } else {
         let cl = CellList::build(&cell_inner, positions, cutoff);
         if parallel && n_atoms >= PARALLEL_THRESHOLD {
@@ -166,6 +169,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_stack_threshold_logic() {
         // This test ensures the auto-tuning produced one of our expected profiles
         assert!(STACK_THRESHOLD == 1000 || STACK_THRESHOLD == 800 || STACK_THRESHOLD == 400);
@@ -251,8 +255,10 @@ mod tests {
         let res_multi = search_single_multi(&[], None, &[1.0], false).unwrap();
         assert!(res_multi[0].0.is_empty());
 
-        assert!(search_single_multi(&[Vector3::zeros()], None, &[], false)
-            .unwrap()
-            .is_empty());
+        assert!(
+            search_single_multi(&[Vector3::zeros()], None, &[], false)
+                .unwrap()
+                .is_empty()
+        );
     }
 }

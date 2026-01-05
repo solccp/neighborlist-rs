@@ -434,13 +434,28 @@ impl CellList {
 
         // Pre-calculate shift vectors using OffsetList
         let mut sx_list = OffsetList::new();
-        sx_list.prepare(bx, self.n_search.x, self.num_bins.x as i32, h_matrix.column(0).into());
-        
+        sx_list.prepare(
+            bx,
+            self.n_search.x,
+            self.num_bins.x as i32,
+            h_matrix.column(0).into(),
+        );
+
         let mut sy_list = OffsetList::new();
-        sy_list.prepare(by, self.n_search.y, self.num_bins.y as i32, h_matrix.column(1).into());
+        sy_list.prepare(
+            by,
+            self.n_search.y,
+            self.num_bins.y as i32,
+            h_matrix.column(1).into(),
+        );
 
         let mut sz_list = OffsetList::new();
-        sz_list.prepare(bz, self.n_search.z, self.num_bins.z as i32, h_matrix.column(2).into());
+        sz_list.prepare(
+            bz,
+            self.n_search.z,
+            self.num_bins.z as i32,
+            h_matrix.column(2).into(),
+        );
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
 
@@ -472,9 +487,12 @@ impl CellList {
                             self.particles[sj + 2],
                             self.particles[sj + 3],
                         ];
-                        let pjx_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_x[sj..sj + 4]).unwrap());
-                        let pjy_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_y[sj..sj + 4]).unwrap());
-                        let pjz_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_z[sj..sj + 4]).unwrap());
+                        let pjx_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_x[sj..sj + 4]).unwrap());
+                        let pjy_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_y[sj..sj + 4]).unwrap());
+                        let pjz_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_z[sj..sj + 4]).unwrap());
 
                         let dx = (pjx_v - pix_v) + ox_v;
                         let dy = (pjy_v - piy_v) + oy_v;
@@ -509,6 +527,7 @@ impl CellList {
         count
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn fill_atom_neighbors(
         &self,
         i: usize,
@@ -536,13 +555,28 @@ impl CellList {
 
         // Pre-calculate shift vectors using OffsetList
         let mut sx_list = OffsetList::new();
-        sx_list.prepare(bx, self.n_search.x, self.num_bins.x as i32, h_matrix.column(0).into());
-        
+        sx_list.prepare(
+            bx,
+            self.n_search.x,
+            self.num_bins.x as i32,
+            h_matrix.column(0).into(),
+        );
+
         let mut sy_list = OffsetList::new();
-        sy_list.prepare(by, self.n_search.y, self.num_bins.y as i32, h_matrix.column(1).into());
+        sy_list.prepare(
+            by,
+            self.n_search.y,
+            self.num_bins.y as i32,
+            h_matrix.column(1).into(),
+        );
 
         let mut sz_list = OffsetList::new();
-        sz_list.prepare(bz, self.n_search.z, self.num_bins.z as i32, h_matrix.column(2).into());
+        sz_list.prepare(
+            bz,
+            self.n_search.z,
+            self.num_bins.z as i32,
+            h_matrix.column(2).into(),
+        );
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
 
@@ -574,9 +608,12 @@ impl CellList {
                             self.particles[sj + 2],
                             self.particles[sj + 3],
                         ];
-                        let pjx_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_x[sj..sj + 4]).unwrap());
-                        let pjy_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_y[sj..sj + 4]).unwrap());
-                        let pjz_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_z[sj..sj + 4]).unwrap());
+                        let pjx_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_x[sj..sj + 4]).unwrap());
+                        let pjy_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_y[sj..sj + 4]).unwrap());
+                        let pjz_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_z[sj..sj + 4]).unwrap());
 
                         let dx = (pjx_v - pix_v) + ox_v;
                         let dy = (pjy_v - piy_v) + oy_v;
@@ -643,13 +680,28 @@ impl CellList {
 
         // Pre-calculate shift vectors using OffsetList
         let mut sx_list = OffsetList::new();
-        sx_list.prepare(bx, self.n_search.x, self.num_bins.x as i32, h_matrix.column(0).into());
-        
+        sx_list.prepare(
+            bx,
+            self.n_search.x,
+            self.num_bins.x as i32,
+            h_matrix.column(0).into(),
+        );
+
         let mut sy_list = OffsetList::new();
-        sy_list.prepare(by, self.n_search.y, self.num_bins.y as i32, h_matrix.column(1).into());
+        sy_list.prepare(
+            by,
+            self.n_search.y,
+            self.num_bins.y as i32,
+            h_matrix.column(1).into(),
+        );
 
         let mut sz_list = OffsetList::new();
-        sz_list.prepare(bz, self.n_search.z, self.num_bins.z as i32, h_matrix.column(2).into());
+        sz_list.prepare(
+            bz,
+            self.n_search.z,
+            self.num_bins.z as i32,
+            h_matrix.column(2).into(),
+        );
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
 
@@ -681,9 +733,12 @@ impl CellList {
                             self.particles[sj + 2],
                             self.particles[sj + 3],
                         ];
-                        let pjx_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_x[sj..sj + 4]).unwrap());
-                        let pjy_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_y[sj..sj + 4]).unwrap());
-                        let pjz_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_z[sj..sj + 4]).unwrap());
+                        let pjx_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_x[sj..sj + 4]).unwrap());
+                        let pjy_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_y[sj..sj + 4]).unwrap());
+                        let pjz_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_z[sj..sj + 4]).unwrap());
 
                         let dx = (pjx_v - pix_v) + ox_v;
                         let dy = (pjy_v - piy_v) + oy_v;
@@ -767,13 +822,28 @@ impl CellList {
 
         // Pre-calculate shift vectors using OffsetList
         let mut sx_list = OffsetList::new();
-        sx_list.prepare(bx, self.n_search.x, self.num_bins.x as i32, h_matrix.column(0).into());
-        
+        sx_list.prepare(
+            bx,
+            self.n_search.x,
+            self.num_bins.x as i32,
+            h_matrix.column(0).into(),
+        );
+
         let mut sy_list = OffsetList::new();
-        sy_list.prepare(by, self.n_search.y, self.num_bins.y as i32, h_matrix.column(1).into());
+        sy_list.prepare(
+            by,
+            self.n_search.y,
+            self.num_bins.y as i32,
+            h_matrix.column(1).into(),
+        );
 
         let mut sz_list = OffsetList::new();
-        sz_list.prepare(bz, self.n_search.z, self.num_bins.z as i32, h_matrix.column(2).into());
+        sz_list.prepare(
+            bz,
+            self.n_search.z,
+            self.num_bins.z as i32,
+            h_matrix.column(2).into(),
+        );
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
 
@@ -805,9 +875,12 @@ impl CellList {
                             self.particles[sj + 2],
                             self.particles[sj + 3],
                         ];
-                        let pjx_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_x[sj..sj + 4]).unwrap());
-                        let pjy_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_y[sj..sj + 4]).unwrap());
-                        let pjz_v = f64x4::from(<[f64; 4]>::try_from(&self.pos_z[sj..sj + 4]).unwrap());
+                        let pjx_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_x[sj..sj + 4]).unwrap());
+                        let pjy_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_y[sj..sj + 4]).unwrap());
+                        let pjz_v =
+                            f64x4::from(<[f64; 4]>::try_from(&self.pos_z[sj..sj + 4]).unwrap());
 
                         let dx = (pjx_v - pix_v) + ox_v;
                         let dy = (pjy_v - piy_v) + oy_v;
@@ -823,7 +896,8 @@ impl CellList {
                                 let d2 = dist_sq_array[k];
                                 for (cutoff_idx, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
                                     if d2 < rc_sq {
-                                        let write_idx = atom_offsets[cutoff_idx] + local_counts[cutoff_idx];
+                                        let write_idx =
+                                            atom_offsets[cutoff_idx] + local_counts[cutoff_idx];
                                         let (ptr_i, ptr_j, ptr_s) = ptrs[cutoff_idx];
                                         let p_i = ptr_i as *mut i64;
                                         let p_j = ptr_j as *mut i64;
@@ -834,8 +908,10 @@ impl CellList {
                                             *p_j.add(write_idx) = j_orig_v[k] as i64;
                                             let ps_base = p_s.add(write_idx * 3);
                                             *ps_base = self.atom_shifts_x[sj + k] - s_i_x + sx;
-                                            *ps_base.add(1) = self.atom_shifts_y[sj + k] - s_i_y + sy;
-                                            *ps_base.add(2) = self.atom_shifts_z[sj + k] - s_i_z + sz;
+                                            *ps_base.add(1) =
+                                                self.atom_shifts_y[sj + k] - s_i_y + sy;
+                                            *ps_base.add(2) =
+                                                self.atom_shifts_z[sj + k] - s_i_z + sz;
                                         }
 
                                         local_counts[cutoff_idx] += 1;
@@ -979,10 +1055,7 @@ fn interleave_3(mut x: u64) -> u64 {
 
 include!(concat!(env!("OUT_DIR"), "/tuned_constants.rs"));
 
-pub fn brute_force_search_simd(
-    positions: &[Vector3<f64>],
-    cutoff: f64,
-) -> EdgeResult {
+pub fn brute_force_search_simd(positions: &[Vector3<f64>], cutoff: f64) -> EdgeResult {
     let n = positions.len();
     let cutoff_sq = cutoff * cutoff;
     let cutoff_sq_v = f64x4::from(cutoff_sq);
@@ -1003,7 +1076,11 @@ pub fn brute_force_search_simd(
             y[i] = p.y;
             z[i] = p.z;
         }
-        (PositionSoA::Stack(x), PositionSoA::Stack(y), PositionSoA::Stack(z))
+        (
+            PositionSoA::Stack(x),
+            PositionSoA::Stack(y),
+            PositionSoA::Stack(z),
+        )
     } else {
         let mut x = Vec::with_capacity(n);
         let mut y = Vec::with_capacity(n);
@@ -1013,7 +1090,11 @@ pub fn brute_force_search_simd(
             y.push(p.y);
             z.push(p.z);
         }
-        (PositionSoA::Heap(x), PositionSoA::Heap(y), PositionSoA::Heap(z))
+        (
+            PositionSoA::Heap(x),
+            PositionSoA::Heap(y),
+            PositionSoA::Heap(z),
+        )
     };
 
     let px = match &pos_x {
@@ -1046,11 +1127,11 @@ pub fn brute_force_search_simd(
 
             let d2 = dx * dx + dy * dy + dz * dz;
             let mask = d2.cmp_lt(cutoff_sq_v);
-            
+
             if mask.any() {
                 let m_array: [u64; 4] = bytemuck::cast(mask);
-                for k in 0..4 {
-                    if m_array[k] != 0 {
+                for (k, &m) in m_array.iter().enumerate() {
+                    if m != 0 {
                         edge_i.push(i as i64);
                         edge_j.push((j + k) as i64);
                         shifts.push(0);
@@ -1080,6 +1161,7 @@ pub fn brute_force_search_simd(
     (edge_i, edge_j, shifts)
 }
 
+#[allow(clippy::large_enum_variant)]
 enum PositionSoA {
     Stack([f64; STACK_THRESHOLD]),
     Heap(Vec<f64>),
@@ -1105,11 +1187,7 @@ pub fn brute_force_search(
     neighbors
 }
 
-pub fn brute_force_search_full(
-    cell: &Cell,
-    positions: &[Vector3<f64>],
-    cutoff: f64,
-) -> EdgeResult {
+pub fn brute_force_search_full(cell: &Cell, positions: &[Vector3<f64>], cutoff: f64) -> EdgeResult {
     // Optimization: Use SIMD kernel for fully isolated systems
     let pbc = cell.pbc();
     if !pbc.x && !pbc.y && !pbc.z {
@@ -1213,7 +1291,11 @@ mod tests {
         };
 
         for _ in 0..n {
-            positions.push(Vector3::new(next_rand() * 10.0, next_rand() * 10.0, next_rand() * 10.0));
+            positions.push(Vector3::new(
+                next_rand() * 10.0,
+                next_rand() * 10.0,
+                next_rand() * 10.0,
+            ));
         }
 
         let cutoff = 2.5;
@@ -1585,7 +1667,7 @@ mod tests {
                 positions_data in prop::collection::vec(prop::collection::vec(-10.0..10.0, 3), 2..100)
             ) {
                 let positions: Vec<Vector3<f64>> = positions_data.into_iter().map(|p| Vector3::new(p[0], p[1], p[2])).collect();
-                
+
                 // Create a cell large enough that no PBC image can ever be within cutoff
                 let h = Matrix3::identity() * 1000.0;
                 let cell = Cell::new(h, Vector3::new(false, false, false)).unwrap();

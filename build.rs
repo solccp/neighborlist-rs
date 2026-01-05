@@ -1,10 +1,10 @@
+use nalgebra::Vector3;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
-use nalgebra::Vector3;
-use wide::{f64x4, CmpLt};
+use wide::{CmpLt, f64x4};
 
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -28,9 +28,9 @@ fn main() {
     for i in 0..n_test {
         pos.push(Vector3::new(i as f64, i as f64, i as f64));
     }
-    
+
     let cutoff = 5.0;
-    
+
     // Average over 5 runs to reduce noise
     let mut total_duration = std::time::Duration::new(0, 0);
     for _ in 0..5 {
@@ -39,9 +39,13 @@ fn main() {
         total_duration += start.elapsed();
     }
     let duration = total_duration / 5;
-    
-    println!("cargo:warning=Calibration average duration for 500 atoms: {:?} ({} micros)", duration, duration.as_micros());
-    
+
+    println!(
+        "cargo:warning=Calibration average duration for 500 atoms: {:?} ({} micros)",
+        duration,
+        duration.as_micros()
+    );
+
     // Heuristic Thresholds:
     // 500 atoms BF ~ 125k interactions.
     // < 1000 micros (1ms) -> Fast CPU -> Threshold 1000
@@ -61,13 +65,25 @@ fn main() {
     // Stack threshold capped at 1024 for safety
     let stack_threshold = bf_threshold.min(1024);
 
-    writeln!(f, "pub const BRUTE_FORCE_THRESHOLD: usize = {};", bf_threshold).unwrap();
-    writeln!(f, "pub const PARALLEL_THRESHOLD: usize = {};", parallel_threshold).unwrap();
+    writeln!(
+        f,
+        "pub const BRUTE_FORCE_THRESHOLD: usize = {};",
+        bf_threshold
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "pub const PARALLEL_THRESHOLD: usize = {};",
+        parallel_threshold
+    )
+    .unwrap();
     writeln!(f, "pub const STACK_THRESHOLD: usize = {};", stack_threshold).unwrap();
 
-    println!("cargo:warning=Auto-tuning Result: BRUTE_FORCE_THRESHOLD={}, PARALLEL_THRESHOLD={}, STACK_THRESHOLD={}", 
-        bf_threshold, parallel_threshold, stack_threshold);
-    
+    println!(
+        "cargo:warning=Auto-tuning Result: BRUTE_FORCE_THRESHOLD={}, PARALLEL_THRESHOLD={}, STACK_THRESHOLD={}",
+        bf_threshold, parallel_threshold, stack_threshold
+    );
+
     println!("cargo:rerun-if-changed=build.rs");
 }
 
@@ -109,7 +125,7 @@ fn dummy_brute_force_simd(positions: &[Vector3<f64>], cutoff: f64) -> usize {
             let dx = px[k] - px[i];
             let dy = py[k] - py[i];
             let dz = pz[k] - pz[i];
-            if dx*dx + dy*dy + dz*dz < cutoff_sq {
+            if dx * dx + dy * dy + dz * dz < cutoff_sq {
                 count += 1;
             }
         }

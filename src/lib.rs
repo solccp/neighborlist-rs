@@ -11,7 +11,10 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 
 use crate::cell::Cell;
 use nalgebra::{Matrix3, Vector3};
-use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, PyUntypedArrayMethods, ndarray};
+use numpy::{
+    PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, PyUntypedArrayMethods,
+    ndarray,
+};
 use pyo3::types::PyDict;
 use std::borrow::Cow;
 use tracing_subscriber::EnvFilter;
@@ -55,10 +58,18 @@ impl PyCell {
         let p = self.inner.pbc();
         format!(
             "PyCell(h=[[{}, {}, {}], [{}, {}, {}], [{}, {}, {}]], pbc=[{}, {}, {}])",
-            h[(0, 0)], h[(0, 1)], h[(0, 2)],
-            h[(1, 0)], h[(1, 1)], h[(1, 2)],
-            h[(2, 0)], h[(2, 1)], h[(2, 2)],
-            p.x, p.y, p.z
+            h[(0, 0)],
+            h[(0, 1)],
+            h[(0, 2)],
+            h[(1, 0)],
+            h[(1, 1)],
+            h[(1, 2)],
+            h[(2, 0)],
+            h[(2, 1)],
+            h[(2, 2)],
+            p.x,
+            p.y,
+            p.z
         )
     }
 
@@ -88,8 +99,8 @@ impl PyCell {
             c[[1, 2]],
             c[[2, 2]],
         );
-        let inner =
-            Cell::new(h_mat, pbc_vec).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let inner = Cell::new(h_mat, pbc_vec)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(PyCell { inner })
     }
 }
@@ -116,10 +127,10 @@ fn get_positions<'a>(positions: &'a PyReadonlyArray2<'a, f64>) -> PyResult<Posit
         ));
     }
 
-    if let Ok(slice) = positions.as_slice() {
-        if let Ok(cast_slice) = bytemuck::try_cast_slice(slice) {
-            return Ok(PositionData::Slice(cast_slice));
-        }
+    if let Ok(slice) = positions.as_slice()
+        && let Ok(cast_slice) = bytemuck::try_cast_slice(slice)
+    {
+        return Ok(PositionData::Slice(cast_slice));
     }
 
     // Fallback: Copy
@@ -383,9 +394,15 @@ fn build_neighborlists_batch<'py>(
                 mats.push(None);
             } else {
                 let h_mat = Matrix3::new(
-                    m[[0, 0]], m[[0, 1]], m[[0, 2]],
-                    m[[1, 0]], m[[1, 1]], m[[1, 2]],
-                    m[[2, 0]], m[[2, 1]], m[[2, 2]],
+                    m[[0, 0]],
+                    m[[0, 1]],
+                    m[[0, 2]],
+                    m[[1, 0]],
+                    m[[1, 1]],
+                    m[[1, 2]],
+                    m[[2, 0]],
+                    m[[2, 1]],
+                    m[[2, 2]],
                 );
                 mats.push(Some((h_mat, Vector3::new(true, true, true))));
             }
@@ -485,9 +502,15 @@ fn build_neighborlists_batch_multi<'py>(
                 mats.push(None);
             } else {
                 let h_mat = Matrix3::new(
-                    m[[0, 0]], m[[0, 1]], m[[0, 2]],
-                    m[[1, 0]], m[[1, 1]], m[[1, 2]],
-                    m[[2, 0]], m[[2, 1]], m[[2, 2]],
+                    m[[0, 0]],
+                    m[[0, 1]],
+                    m[[0, 2]],
+                    m[[1, 0]],
+                    m[[1, 1]],
+                    m[[1, 2]],
+                    m[[2, 0]],
+                    m[[2, 1]],
+                    m[[2, 2]],
                 );
                 mats.push(Some((h_mat, Vector3::new(true, true, true))));
             }

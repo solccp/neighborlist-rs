@@ -1,3 +1,4 @@
+import json
 import time
 import numpy as np
 import os
@@ -7,19 +8,18 @@ import sys
 from ase.io import read
 import vesin
 import neighborlist_rs
-import torch
-import torch_nl
-from torch_cluster import radius_graph
 
 # Benchmark settings
 CUTOFFS = [6.0, 14.0, 20.0]
 N_REPEAT = 7  # Reduced repeat for faster execution of more cases
 
+
 def benchmark_neighborlist_rs_worker(filepath, cutoff, n_threads):
     """Executes the benchmark in a subprocess to ensure Rayon pool is sized correctly."""
     use_parallel = "True" if n_threads > 1 else "False"
     cmd = [
-        sys.executable, "-c",
+        sys.executable,
+        "-c",
         f"""
 import os
 os.environ["RAYON_NUM_THREADS"] = "{n_threads}"
@@ -44,14 +44,13 @@ for _ in range({N_REPEAT}):
     end = time.perf_counter()
     times.append(end - start)
 print(np.mean(times))
-"""
+""",
     ]
     res = subprocess.check_output(cmd).decode().strip()
     # The last line should be the mean time
     last_line = res.splitlines()[-1]
     return float(last_line)
 
-import json
 
 def run_benchmarks():
     results = {}
@@ -69,7 +68,7 @@ def run_benchmarks():
         ("20,000 (Ethanol PBC)", os.path.join(data_dir, "ethanol_20000.xyz")),
         ("Si Bulk (PBC)", os.path.join(data_dir, "si_bulk.xyz")),
     ]
-    
+
     # Pre-load atoms for non-RS libraries
     systems_data = []
     for name, filepath in configs:
@@ -78,18 +77,18 @@ def run_benchmarks():
 
     for cutoff in CUTOFFS:
         results[cutoff] = {}
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print(f"BENCHMARK CUTOFF: {cutoff} Angstroms")
-        print(f"{'='*80}")
+        print(f"{'=' * 80}")
         print(f"{'System':<30} | {'Lib':<15} | {'Threads':<5} | {'Time (ms)':<10}")
         print("-" * 80)
-        
+
         for name, filepath, atoms in systems_data:
             results[cutoff][name] = {}
             # --- Correctness Check ---
             pos = atoms.get_positions()
             box = atoms.get_cell()[:]
-            
+
             if np.all(box == 0):
                 min_bound = np.min(pos, axis=0)
                 max_bound = np.max(pos, axis=0)
@@ -102,29 +101,37 @@ def run_benchmarks():
                 periodic = True
 
             calc_vesin = vesin.NeighborList(cutoff=cutoff, full_list=False)
-            i_v, j_v, _ = calc_vesin.compute(pos, box, periodic=periodic, quantities="ijS")
-            
+            i_v, j_v, _ = calc_vesin.compute(
+                pos, box, periodic=periodic, quantities="ijS"
+            )
+
             if np.all(atoms.get_cell() == 0):
                 cell_rs = None
             else:
                 h_T = atoms.get_cell()[:].T.tolist()
                 cell_rs = neighborlist_rs.PyCell(h_T)
 
-            res_rs = neighborlist_rs.build_neighborlists(cell_rs, pos, cutoff, parallel=True)
+            res_rs = neighborlist_rs.build_neighborlists(
+                cell_rs, pos, cutoff, parallel=True
+            )
             edge_index = res_rs["edge_index"]
             i_rs, j_rs = edge_index[0], edge_index[1]
-            
+
             p_v = set((min(u, v), max(u, v)) for u, v in zip(i_v, j_v) if u != v)
             p_rs = set((min(u, v), max(u, v)) for u, v in zip(i_rs, j_rs))
-            
+
             edges_v = sum(1 for u, v in zip(i_v, j_v) if u != v)
             edges_rs = len(i_rs)
 
             if p_v != p_rs:
-                print(f"ERROR: Mismatch for {name} (Cutoff {cutoff})! Unique Pairs V:{len(p_v)} RS:{len(p_rs)}")
+                print(
+                    f"ERROR: Mismatch for {name} (Cutoff {cutoff})! Unique Pairs V:{len(p_v)} RS:{len(p_rs)}"
+                )
             else:
-                print(f"Correctness: PASSED for {name} (Cutoff {cutoff}) - Unique Pairs V:{len(p_v)} RS:{len(p_rs)} | Total Edges V:{edges_v} RS:{edges_rs}")
-            
+                print(
+                    f"Correctness: PASSED for {name} (Cutoff {cutoff}) - Unique Pairs V:{len(p_v)} RS:{len(p_rs)} | Total Edges V:{edges_v} RS:{edges_rs}"
+                )
+
             # Vesin Benchmark
             t_v = []
             for _ in range(N_REPEAT):
@@ -134,23 +141,29 @@ def run_benchmarks():
                 end = time.perf_counter()
                 t_v.append(end - start)
             results[cutoff][name]["vesin"] = np.mean(t_v) * 1000
-            print(f"{name:<30} | {'Vesin':<15} | {'Auto':<5} | {results[cutoff][name]['vesin']:<10.2f}")
-            
+            print(
+                f"{name:<30} | {'Vesin':<15} | {'Auto':<5} | {results[cutoff][name]['vesin']:<10.2f}"
+            )
+
             # neighborlist-rs (1 CPU)
             t1 = benchmark_neighborlist_rs_worker(filepath, cutoff, 1)
             results[cutoff][name]["rs_1"] = t1 * 1000
-            print(f"{name:<30} | {'neighborlist-rs':<15} | {'1':<5} | {results[cutoff][name]['rs_1']:<10.2f}")
-            
+            print(
+                f"{name:<30} | {'neighborlist-rs':<15} | {'1':<5} | {results[cutoff][name]['rs_1']:<10.2f}"
+            )
+
             # neighborlist-rs (Max CPUs)
             n_cpus = min(8, psutil.cpu_count(logical=True))
             t_max = benchmark_neighborlist_rs_worker(filepath, cutoff, n_cpus)
             results[cutoff][name][f"rs_{n_cpus}"] = t_max * 1000
-            print(f"{name:<30} | {'neighborlist-rs':<15} | {n_cpus:<5} | {results[cutoff][name][f'rs_{n_cpus}']:<10.2f}")
+            print(
+                f"{name:<30} | {'neighborlist-rs':<15} | {n_cpus:<5} | {results[cutoff][name][f'rs_{n_cpus}']:<10.2f}"
+            )
             print("-" * 80)
     return results
+
 
 if __name__ == "__main__":
     res = run_benchmarks()
     with open("benchmarks/baseline_results.json", "w") as f:
         json.dump(res, f, indent=4)
-

@@ -92,6 +92,11 @@ fn build_neighborlists<'py>(
     cutoff: f64,
     parallel: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
+    if !cutoff.is_finite() || cutoff <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Cutoff must be positive and finite",
+        ));
+    }
     let pos_data = get_positions(&positions)?;
     let n_atoms = pos_data.len();
 
@@ -223,6 +228,11 @@ fn build_neighborlists_multi<'py>(
     if cutoffs.is_empty() {
         return Ok(PyDict::new(py));
     }
+    if cutoffs.iter().any(|&c| !c.is_finite() || c <= 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "All cutoffs must be positive and finite",
+        ));
+    }
     if labels.as_ref().is_some_and(|l| l.len() != cutoffs.len()) {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "Length of labels must match length of cutoffs",
@@ -292,6 +302,11 @@ fn build_neighborlists_batch<'py>(
     cutoff: f64,
     parallel: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
+    if !cutoff.is_finite() || cutoff <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Cutoff must be positive and finite",
+        ));
+    }
     let pos_data = get_positions(&positions)?;
     let batch_view = batch.as_array();
     let n_total = pos_data.len();
@@ -403,6 +418,12 @@ fn build_neighborlists_batch_multi<'py>(
 
     if n_total == 0 || cutoffs.is_empty() {
         return Ok(PyDict::new(py));
+    }
+
+    if cutoffs.iter().any(|&c| !c.is_finite() || c <= 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "All cutoffs must be positive and finite",
+        ));
     }
 
     if labels.as_ref().is_some_and(|l| l.len() != cutoffs.len()) {

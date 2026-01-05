@@ -15,10 +15,10 @@
 - [ ] Task: Conductor - User Manual Verification 'Linux Matrix Build & Test' (Protocol in workflow.md)
 
 ## Phase 3: Cross-Platform Expansion
-- [ ] Task: Add macOS (arm64) support to the matrix.
-- [ ] Task: Add Windows (amd64) support to the matrix.
-- [ ] Task: Add Ubuntu (arm64) support (using `maturin-action`'s cross-compilation or specialized runners).
-- [ ] Task: Verify successful builds across the entire OS/Python matrix.
+- [x] Task: Add macOS (arm64) support to the matrix. [4c7a3df]
+- [x] Task: Add Windows (amd64) support to the matrix. [4c7a3df]
+- [x] Task: Add Ubuntu (arm64) support (using `maturin-action`'s cross-compilation or specialized runners). [4c7a3df]
+- [x] Task: Verify successful builds across the entire OS/Python matrix. [4c7a3df]
 - [ ] Task: Conductor - User Manual Verification 'Cross-Platform Expansion' (Protocol in workflow.md)
 
 ## Phase 4: Benchmarks & Caching

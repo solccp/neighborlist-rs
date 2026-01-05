@@ -8,10 +8,10 @@
 - [ ] Task: Conductor - User Manual Verification 'Linting & Static Analysis' (Protocol in workflow.md)
 
 ## Phase 2: Linux Matrix Build & Test
-- [ ] Task: Configure `maturin-action` for Linux (amd64).
-- [ ] Task: Implement Python version matrix (3.11, 3.12, 3.13) for Linux.
-- [ ] Task: Integrate `cargo test` and `pytest tests/` into the Linux job.
-- [ ] Task: Verify tests run and report results correctly in the GitHub UI.
+- [x] Task: Configure `maturin-action` for Linux (amd64). [8999686]
+- [x] Task: Implement Python version matrix (3.11, 3.12, 3.13) for Linux. [8999686]
+- [x] Task: Integrate `cargo test` and `pytest tests/` into the Linux job. [8999686]
+- [x] Task: Verify tests run and report results correctly in the GitHub UI. [8999686]
 - [ ] Task: Conductor - User Manual Verification 'Linux Matrix Build & Test' (Protocol in workflow.md)
 
 ## Phase 3: Cross-Platform Expansion

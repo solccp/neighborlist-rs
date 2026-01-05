@@ -2,10 +2,9 @@ use crate::cell::Cell;
 use crate::search::{self, CellList, EdgeResult};
 use nalgebra::{Matrix3, Vector3};
 
-pub const BRUTE_FORCE_THRESHOLD: usize = 800;
-pub const PARALLEL_THRESHOLD: usize = 256;
+include!(concat!(env!("OUT_DIR"), "/tuned_constants.rs"));
+
 pub const AUTO_BOX_MARGIN: f64 = 1.0;
-pub const STACK_THRESHOLD: usize = 512;
 
 pub fn search_single(
     positions: &[Vector3<f64>],
@@ -18,24 +17,6 @@ pub fn search_single(
         return Ok((vec![], vec![], vec![]));
     }
 
-    // Optimization: Stack-allocated position buffer for very small systems
-    // to avoid heap allocation in search_single when inferring box.
-    // However, the input positions is already a slice.
-    // The main allocation here is for the box inference or the return vectors.
-    // Wait, the input `positions` is already `&[Vector3<f64>]`.
-    // The previous plan mentioned "Implement a stack-allocated position buffer... in search_single".
-    // This is useful if we were COPYING positions. But we are already using zero-copy slices from numpy.
-    // So the input `positions` IS the buffer.
-    
-    // Let's look at where we DO allocate:
-    // 1. Return vectors (edge_i, edge_j, shifts) -> These MUST be on heap to return to Python.
-    // 2. CellList internal vectors -> These are on heap.
-    
-    // Maybe the user meant the scratchpad for SoA conversion in search.rs?
-    // Let's re-read the spec: "Use stack-allocated arrays (e.g., [f64; 1024]) for atom positions and temporary data when N is below a safety threshold."
-    
-    // Okay, I will implement it in `brute_force_search_simd` in `src/search.rs` instead,
-    // as that's where we copy to SoA (pos_x, pos_y, pos_z).
 
     let cell_inner = if let Some((h_mat, pbc)) = cell {
         Cell::new(h_mat, pbc).map_err(|e| e.to_string())?

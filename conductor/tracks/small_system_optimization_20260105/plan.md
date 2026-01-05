@@ -1,6 +1,6 @@
 # Plan: Small System Optimization (< 1000 atoms)
 
-## Phase 1: Baseline & Regression Testing
+## Phase 1: Baseline & Regression Testing [checkpoint: 003930f]
 - [x] Task: Create granular micro-benchmarks for systems of size 50, 100, 200, 500, 1000 atoms in `benchmarks/small_systems.py`. [3d2a40e]
 - [x] Task: Write property tests in `src/search.rs` specifically for isolated systems to ensure edge-case correctness (e.g., all atoms at origin, atoms very far apart). [752cceb]
 - [ ] Task: Conductor - User Manual Verification 'Baseline & Regression Testing' (Protocol in workflow.md)

@@ -21,7 +21,7 @@ This track aims to improve the codebase across three main dimensions:
 - [~] **Input Validation**:
     - [x] Enforce `(N, 3)` shape for positions in batch bindings (`src/lib.rs`). [5d2ad5b]
     - [x] Validate `cutoff` is finite and positive. [3d34f1b]
-    - [ ] Validate batch IDs are sorted/monotonic or handle unsorted input.
+    - [x] Validate batch IDs are sorted/monotonic or handle unsorted input. [1ec9a79]
 - [ ] **Edge Cases & Testing**:
     - [ ] Add unit tests for invalid cutoffs and unsorted batch IDs.
     - [ ] **ASE PBC Validation**: Enable and fix ASE PBC path tests to ensure `build_from_ase` handles transposes correctly.

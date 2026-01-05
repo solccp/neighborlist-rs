@@ -7,7 +7,7 @@
 - [x] Task: Verify linting jobs fail on intentional errors and pass on clean code. [55a7ac2, b8473bc]
 - [ ] Task: Conductor - User Manual Verification 'Linting & Static Analysis' (Protocol in workflow.md)
 
-## Phase 2: Linux Matrix Build & Test
+## Phase 2: Linux Matrix Build & Test [checkpoint: c4f2c9a]
 - [x] Task: Configure `maturin-action` for Linux (amd64). [8999686]
 - [x] Task: Implement Python version matrix (3.11, 3.12, 3.13) for Linux. [8999686]
 - [x] Task: Integrate `cargo test` and `pytest tests/` into the Linux job. [8999686]

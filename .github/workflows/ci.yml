@@ -37,3 +37,38 @@ jobs:
 
       - name: Ruff Format Check
         run: ruff format --check .
+
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build and Test (Maturin)
+        uses: PyO3/maturin-action@v1
+        with:
+          command: test
+          args: --release
+          sccache: 'true'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install pytest numpy ase
+          pip install .
+
+      - name: Run pytest
+        run: pytest tests/

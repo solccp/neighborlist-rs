@@ -11,12 +11,12 @@
 - [x] Task: Write unit tests to verify `brute_force_search_simd` produces bit-identical results to the serial implementation. [ceb0a04]
 - [x] Task: Conductor - User Manual Verification 'SIMD Brute-Force Kernel' (Protocol in workflow.md) [ceb0a04]
 
-## Phase 3: Memory & Threshold Optimization
-- [x] Task: Implement a stack-allocated position buffer (using `ArrayVec` or a local array with a safety threshold of $N=512$) in `search_single`. [aa9e0e0]
-- [x] Task: Add a safety fallback to heap allocation for systems exceeding the stack threshold. [aa9e0e0]
-- [x] Task: Benchmark the crossover point and update `BRUTE_FORCE_THRESHOLD` based on new performance data. [aa9e0e0]
-- [x] Task: Implement `build.rs` for compile-time auto-tuning of thresholds (Brute Force, Parallel, and Stack). [dfdabf9]
-- [~] Task: Conductor - User Manual Verification 'Memory & Threshold Optimization' (Protocol in workflow.md)
+## Phase 3: Memory & Threshold Optimization [checkpoint: 1573576]
+- [x] Task: Implement a stack-allocated position buffer (using `ArrayVec` or a local array with a safety threshold of $N=512$) in `search_single`. [1573576]
+- [x] Task: Add a safety fallback to heap allocation for systems exceeding the stack threshold. [1573576]
+- [x] Task: Benchmark the crossover point and update `BRUTE_FORCE_THRESHOLD` based on new performance data. [1573576]
+- [x] Task: Implement `build.rs` for compile-time auto-tuning of thresholds (Brute Force, Parallel, and Stack). [1573576]
+- [x] Task: Conductor - User Manual Verification 'Memory & Threshold Optimization' (Protocol in workflow.md) [1573576]
 
 ## Phase 4: Final Verification
 - [~] Task: Run `benchmarks/comprehensive_benchmark.py` and verify `neighborlist-rs` < `vesin` for the 100 and 1000 atom cases.

@@ -59,13 +59,21 @@ def test_ase_pbc_true():
     np.testing.assert_array_equal(res["shift"], res_manual["shift"])
 
 @pytest.mark.skipif(not ASE_AVAILABLE, reason="ASE not installed")
-def test_ase_mixed_pbc_error():
-    atoms = Atoms('H2', positions=[[0, 0, 0], [0, 0, 1.0]])
+def test_ase_mixed_pbc_success():
+    # 2D periodicity: periodic in X, Y; non-periodic in Z
+    atoms = Atoms('H2', positions=[[0.1, 0.1, 0.1], [0.1, 0.1, 9.9]])
     atoms.set_cell([10, 10, 10])
     atoms.pbc = [True, True, False]
     
-    with pytest.raises(ValueError, match="Mixed PBC"):
-        neighborlist_rs.build_from_ase(atoms, 1.5)
+    # Across Z boundary (9.9 - 0.1 = 9.8). If periodic in Z, it would be 0.2.
+    # Since NOT periodic in Z, distance is 9.8 > 1.5.
+    res = neighborlist_rs.build_from_ase(atoms, 1.5)
+    assert res["edge_index"].shape[1] == 0
+    
+    # Across X boundary (0.1 and 9.9). Periodic in X.
+    atoms.positions[1] = [9.9, 0.1, 0.1]
+    res = neighborlist_rs.build_from_ase(atoms, 1.5)
+    assert res["edge_index"].shape[1] == 1
 
 @pytest.mark.skipif(not ASE_AVAILABLE, reason="ASE not installed")
 def test_ase_no_pbc():

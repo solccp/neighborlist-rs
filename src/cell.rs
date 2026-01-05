@@ -11,12 +11,13 @@ pub enum CellError {
 pub struct Cell {
     h: Matrix3<f64>,
     h_inv: Matrix3<f64>,
+    pbc: Vector3<bool>,
 }
 
 impl Cell {
-    pub fn new(h: Matrix3<f64>) -> Result<Self, CellError> {
+    pub fn new(h: Matrix3<f64>, pbc: Vector3<bool>) -> Result<Self, CellError> {
         let h_inv = h.try_inverse().ok_or(CellError::NotInvertible)?;
-        Ok(Self { h, h_inv })
+        Ok(Self { h, h_inv, pbc })
     }
 
     pub fn to_fractional(&self, cart: &Vector3<f64>) -> Vector3<f64> {
@@ -35,6 +36,10 @@ impl Cell {
         &self.h_inv
     }
 
+    pub fn pbc(&self) -> &Vector3<bool> {
+        &self.pbc
+    }
+
     /// Returns the perpendicular widths of the cell (distances between parallel faces).
     /// d_i = 1 / |h_inv.row(i)|
     pub fn perpendicular_widths(&self) -> Vector3<f64> {
@@ -48,9 +53,9 @@ impl Cell {
     pub fn wrap(&self, cart: &Vector3<f64>) -> Vector3<f64> {
         let frac = self.to_fractional(cart);
         let wrapped_frac = Vector3::new(
-            frac.x - frac.x.floor(),
-            frac.y - frac.y.floor(),
-            frac.z - frac.z.floor(),
+            if self.pbc.x { frac.x - frac.x.floor() } else { frac.x },
+            if self.pbc.y { frac.y - frac.y.floor() } else { frac.y },
+            if self.pbc.z { frac.z - frac.z.floor() } else { frac.z },
         );
         self.to_cartesian(&wrapped_frac)
     }
@@ -61,7 +66,11 @@ impl Cell {
         r_j: &Vector3<f64>,
     ) -> (Vector3<i32>, Vector3<f64>) {
         let d_frac = self.to_fractional(&(r_j - r_i));
-        let shift_frac = Vector3::new(-d_frac.x.round(), -d_frac.y.round(), -d_frac.z.round());
+        let shift_frac = Vector3::new(
+            if self.pbc.x { -d_frac.x.round() } else { 0.0 },
+            if self.pbc.y { -d_frac.y.round() } else { 0.0 },
+            if self.pbc.z { -d_frac.z.round() } else { 0.0 },
+        );
         let shift = Vector3::new(
             shift_frac.x as i32,
             shift_frac.y as i32,
@@ -81,7 +90,7 @@ mod tests {
     #[test]
     fn test_coordinate_transformation() {
         let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         let cart = Vector3::new(5.0, 2.0, 8.0);
         let frac = cell.to_fractional(&cart);
@@ -100,7 +109,7 @@ mod tests {
     fn test_triclinic_cell() {
         // A simple triclinic cell
         let h = Matrix3::new(10.0, 2.0, 1.0, 0.0, 10.0, 0.5, 0.0, 0.0, 10.0);
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         let cart = Vector3::new(13.0, 10.5, 10.0);
         let frac = cell.to_fractional(&cart);
@@ -114,22 +123,24 @@ mod tests {
     #[test]
     fn test_invalid_cell() {
         let h = Matrix3::zeros();
-        let cell = Cell::new(h);
+        let cell = Cell::new(h, Vector3::new(true, true, true));
         assert!(cell.is_err());
     }
 
     #[test]
     fn test_getters() {
         let h = Matrix3::identity();
-        let cell = Cell::new(h).unwrap();
+        let pbc = Vector3::new(true, false, true);
+        let cell = Cell::new(h, pbc).unwrap();
         assert_eq!(cell.h(), &h);
         assert_eq!(cell.h_inv(), &h);
+        assert_eq!(cell.pbc(), &pbc);
     }
 
     #[test]
     fn test_wrapping() {
         let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         let cart = Vector3::new(15.0, -2.0, 8.0);
         let wrapped = cell.wrap(&cart);
@@ -140,17 +151,29 @@ mod tests {
     }
 
     #[test]
+    fn test_mixed_pbc_wrapping() {
+        let h = Matrix3::identity() * 10.0;
+        let pbc = Vector3::new(true, false, false);
+        let cell = Cell::new(h, pbc).unwrap();
+
+        let cart = Vector3::new(15.0, 15.0, 15.0);
+        let wrapped = cell.wrap(&cart);
+
+        assert_relative_eq!(wrapped.x, 5.0); // Periodic
+        assert_relative_eq!(wrapped.y, 15.0); // Non-periodic
+        assert_relative_eq!(wrapped.z, 15.0); // Non-periodic
+    }
+
+    #[test]
     fn test_minimum_image() {
         let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         let r_i = Vector3::new(1.0, 1.0, 1.0);
         let r_j = Vector3::new(9.0, 9.0, 9.0);
 
         let (shift, disp) = cell.get_shift_and_displacement(&r_i, &r_j);
 
-        // r_j_img = r_j + shift * H = [9, 9, 9] + [-1, -1, -1] * 10 = [-1, -1, -1]
-        // disp = r_j_img - r_i = [-1, -1, -1] - [1, 1, 1] = [-2, -2, -2]
         assert_eq!(shift.x, -1);
         assert_eq!(shift.y, -1);
         assert_eq!(shift.z, -1);
@@ -158,5 +181,25 @@ mod tests {
         assert_relative_eq!(disp.x, -2.0);
         assert_relative_eq!(disp.y, -2.0);
         assert_relative_eq!(disp.z, -2.0);
+    }
+
+    #[test]
+    fn test_mixed_pbc_mic() {
+        let h = Matrix3::identity() * 10.0;
+        let pbc = Vector3::new(true, false, false);
+        let cell = Cell::new(h, pbc).unwrap();
+
+        let r_i = Vector3::new(1.0, 1.0, 1.0);
+        let r_j = Vector3::new(9.0, 9.0, 9.0);
+
+        let (shift, disp) = cell.get_shift_and_displacement(&r_i, &r_j);
+
+        assert_eq!(shift.x, -1); // Periodic
+        assert_eq!(shift.y, 0); // Non-periodic
+        assert_eq!(shift.z, 0); // Non-periodic
+
+        assert_relative_eq!(disp.x, -2.0);
+        assert_relative_eq!(disp.y, 8.0);
+        assert_relative_eq!(disp.z, 8.0);
     }
 }

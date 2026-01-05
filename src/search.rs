@@ -1110,7 +1110,7 @@ mod tests {
     #[test]
     fn test_spatial_reordering_correctness() {
         let h = Matrix3::identity() * 10.0;
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         // Atoms that are far in original index but close in space
         let positions = vec![
@@ -1156,7 +1156,7 @@ mod tests {
     #[test]
     fn test_brute_force_reference() {
         let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0),
@@ -1177,7 +1177,7 @@ mod tests {
     #[test]
     fn test_cell_list_structure() {
         let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0), // Bin [0, 0, 0]
@@ -1205,7 +1205,7 @@ mod tests {
     #[test]
     fn test_cell_list_search_vs_brute_force() {
         let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0);
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0),
@@ -1239,7 +1239,7 @@ mod tests {
         let _profiler = dhat::Profiler::new_heap();
 
         let h = Matrix3::identity() * 20.0;
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         let mut positions = Vec::new();
         for i in 0..100 {
@@ -1256,7 +1256,7 @@ mod tests {
     #[test]
     fn test_par_search_optimized_consistency() {
         let h = Matrix3::identity() * 10.0;
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
         // Create enough atoms to trigger parallel threshold if we were using the python binding,
         // but here we call it directly so it doesn't matter, but good for stress test.
@@ -1295,7 +1295,7 @@ mod tests {
     #[test]
     fn test_par_search_multi_consistency() {
         let h = Matrix3::identity() * 10.0;
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0),
             Vector3::new(1.2, 1.0, 1.0), // dist 0.2
@@ -1331,7 +1331,7 @@ mod tests {
     #[test]
     fn test_brute_force_full_consistency() {
         let h = Matrix3::identity() * 10.0;
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
         let positions = vec![Vector3::new(1.0, 1.0, 1.0), Vector3::new(1.2, 1.0, 1.0)];
         let cutoff = 0.5;
 
@@ -1357,7 +1357,7 @@ mod tests {
     #[test]
     fn test_brute_force_multi_consistency() {
         let h = Matrix3::identity() * 10.0;
-        let cell = Cell::new(h).unwrap();
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0),
             Vector3::new(1.2, 1.0, 1.0),
@@ -1402,7 +1402,7 @@ mod tests {
                 positions_data in prop::collection::vec(prop::collection::vec(0.0..20.0, 3), 2..50)
             ) {
                 let h = Matrix3::identity() * box_size;
-                let cell = Cell::new(h).unwrap();
+                let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
                 let mut positions = Vec::new();
                 for p in positions_data {

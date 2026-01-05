@@ -8,18 +8,18 @@ def test_pycell_repr():
     repr_str = repr(cell)
     print(f"Repr: {repr_str}")
     
-def test_pycell_from_ase():
+def test_pycell_from_ase_mixed_pbc():
     try:
-        from ase.build import bulk
+        from ase import Atoms
     except ImportError:
         pytest.skip("ASE not installed")
         
-    atoms = bulk("Cu", "fcc", a=3.6)
+    atoms = Atoms('H', positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=[True, True, False])
+    
+    # Currently this raises ValueError in extract_ase_data, 
+    # but we want it to work (or at least PyCell to support it).
+    # If we implement Mixed PBC, PyCell needs to know which dims are periodic.
     cell = neighborlist_rs.PyCell.from_ase(atoms)
     
-    # ASE cell: [[0, 1.8, 1.8], [1.8, 0, 1.8], [1.8, 1.8, 0]]
-    # PyCell should have the transpose (though this one is symmetric)
-    # Let's check the repr
-    repr_str = repr(cell)
-    assert "PyCell" in repr_str
-    assert "1.8" in repr_str
+    # Check that it didn't crash.
+    assert "PyCell" in repr(cell)

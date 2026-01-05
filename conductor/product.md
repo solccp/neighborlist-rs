@@ -20,6 +20,7 @@ To build a high-performance, safe, and deterministic neighborlist construction l
 -   **System Support:**
     -   Molecules (Non-PBC).
     -   Crystals (PBC) including Triclinic cells.
+    -   Mixed PBC systems (e.g., Slabs, Wires).
 -   **Multi-List Generation:**
     -   Simultaneously generate lists for Local (GNN), Dispersion (DFTD3), and Coulomb interactions in a single pass.
 -   **Batched Processing:**
@@ -29,6 +30,7 @@ To build a high-performance, safe, and deterministic neighborlist construction l
     -   Configurable directed/undirected edges.
 -   **Integration:**
     -   Zero-copy (where possible) Python bindings via PyO3/maturin.
+    -   Direct integration with ASE (Atomic Simulation Environment) for seamless workflow.
 
 ## Advanced Features (Phase 2)
 -   **Dynamic Neighbor Management:**

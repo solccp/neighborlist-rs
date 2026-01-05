@@ -24,7 +24,8 @@ pub struct PyCell {
 #[pymethods]
 impl PyCell {
     #[new]
-    fn new(h: Vec<Vec<f64>>) -> PyResult<Self> {
+    #[pyo3(signature = (h, pbc=None))]
+    fn new(h: Vec<Vec<f64>>, pbc: Option<[bool; 3]>) -> PyResult<Self> {
         if h.len() != 3 || h.iter().any(|r| r.len() != 3) {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "Cell matrix must be 3x3",
@@ -33,8 +34,13 @@ impl PyCell {
         let h_mat = Matrix3::new(
             h[0][0], h[0][1], h[0][2], h[1][0], h[1][1], h[1][2], h[2][0], h[2][1], h[2][2],
         );
-        let inner =
-            Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let pbc_vec = if let Some(p) = pbc {
+            Vector3::new(p[0], p[1], p[2])
+        } else {
+            Vector3::new(true, true, true)
+        };
+        let inner = Cell::new(h_mat, pbc_vec)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(PyCell { inner })
     }
 
@@ -46,11 +52,13 @@ impl PyCell {
 
     fn __repr__(&self) -> String {
         let h = self.inner.h();
+        let p = self.inner.pbc();
         format!(
-            "PyCell(h=[[{}, {}, {}], [{}, {}, {}], [{}, {}, {}]])",
+            "PyCell(h=[[{}, {}, {}], [{}, {}, {}], [{}, {}, {}]], pbc=[{}, {}, {}])",
             h[(0, 0)], h[(0, 1)], h[(0, 2)],
             h[(1, 0)], h[(1, 1)], h[(1, 2)],
-            h[(2, 0)], h[(2, 1)], h[(2, 2)]
+            h[(2, 0)], h[(2, 1)], h[(2, 2)],
+            p.x, p.y, p.z
         )
     }
 
@@ -63,6 +71,11 @@ impl PyCell {
         if c.shape() != [3, 3] {
             return Err(pyo3::exceptions::PyValueError::new_err("Cell must be 3x3"));
         }
+
+        let pbc_obj = atoms.call_method0("get_pbc")?;
+        let pbc: [bool; 3] = pbc_obj.extract()?;
+        let pbc_vec = Vector3::new(pbc[0], pbc[1], pbc[2]);
+
         // Transpose ASE (row-major) to internal (column-major)
         let h_mat = Matrix3::new(
             c[[0, 0]],
@@ -76,7 +89,7 @@ impl PyCell {
             c[[2, 2]],
         );
         let inner =
-            Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+            Cell::new(h_mat, pbc_vec).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(PyCell { inner })
     }
 }
@@ -149,10 +162,10 @@ fn build_neighborlists<'py>(
         return Ok(dict);
     }
 
-    let cell_mat = cell.map(|c| c.inner.h());
+    let cell_info = cell.map(|c| (*c.inner.h(), *c.inner.pbc()));
 
     let (mut edge_i, edge_j, shifts) =
-        single::search_single(&pos_data, cell_mat.copied(), cutoff, parallel)
+        single::search_single(&pos_data, cell_info, cutoff, parallel)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     let dict = PyDict::new(py);
@@ -177,25 +190,15 @@ fn extract_ase_data<'py>(
 
     // 2. Extract PBC
     let pbc_obj = atoms.call_method0("get_pbc")?;
-    let pbc: Vec<bool> = pbc_obj.extract()?;
-    if pbc.len() != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "PBC must be length 3",
-        ));
-    }
+    let pbc: [bool; 3] = pbc_obj.extract()?;
 
     // 3. Handle PBC logic
-    let all_periodic = pbc.iter().all(|&x| x);
-    let none_periodic = pbc.iter().all(|&x| !x);
+    let any_periodic = pbc.iter().any(|&x| x);
 
-    let py_cell = if all_periodic {
+    let py_cell = if any_periodic {
         Some(PyCell::from_ase(atoms)?)
-    } else if none_periodic {
-        None
     } else {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Mixed PBC (e.g., [True, True, False]) is not currently supported. Only all-True or all-False is supported.",
-        ));
+        None
     };
 
     Ok((positions, py_cell))
@@ -273,9 +276,9 @@ fn build_neighborlists_multi<'py>(
         return Ok(result_dict);
     }
 
-    let cell_mat = cell.map(|c| c.inner.h());
+    let cell_info = cell.map(|c| (*c.inner.h(), *c.inner.pbc()));
 
-    let results = single::search_single_multi(&pos_data, cell_mat.copied(), &cutoffs, disjoint)
+    let results = single::search_single_multi(&pos_data, cell_info, &cutoffs, disjoint)
         .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     let result_dict = PyDict::new(py);
@@ -379,17 +382,12 @@ fn build_neighborlists_batch<'py>(
             if is_zero_matrix(&m) {
                 mats.push(None);
             } else {
-                mats.push(Some(Matrix3::new(
-                    m[[0, 0]],
-                    m[[0, 1]],
-                    m[[0, 2]],
-                    m[[1, 0]],
-                    m[[1, 1]],
-                    m[[1, 2]],
-                    m[[2, 0]],
-                    m[[2, 1]],
-                    m[[2, 2]],
-                )));
+                let h_mat = Matrix3::new(
+                    m[[0, 0]], m[[0, 1]], m[[0, 2]],
+                    m[[1, 0]], m[[1, 1]], m[[1, 2]],
+                    m[[2, 0]], m[[2, 1]], m[[2, 2]],
+                );
+                mats.push(Some((h_mat, Vector3::new(true, true, true))));
             }
         }
         mats
@@ -486,17 +484,12 @@ fn build_neighborlists_batch_multi<'py>(
             if is_zero_matrix(&m) {
                 mats.push(None);
             } else {
-                mats.push(Some(Matrix3::new(
-                    m[[0, 0]],
-                    m[[0, 1]],
-                    m[[0, 2]],
-                    m[[1, 0]],
-                    m[[1, 1]],
-                    m[[1, 2]],
-                    m[[2, 0]],
-                    m[[2, 1]],
-                    m[[2, 2]],
-                )));
+                let h_mat = Matrix3::new(
+                    m[[0, 0]], m[[0, 1]], m[[0, 2]],
+                    m[[1, 0]], m[[1, 1]], m[[1, 2]],
+                    m[[2, 0]], m[[2, 1]], m[[2, 2]],
+                );
+                mats.push(Some((h_mat, Vector3::new(true, true, true))));
             }
         }
         mats

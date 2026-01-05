@@ -11,7 +11,7 @@ pub const AUTO_BOX_MARGIN: f64 = 1.0;
 pub fn search_batch(
     positions: &[Vector3<f64>],
     batch: &[i32],
-    cells: &[Option<Matrix3<f64>>],
+    cells: &[Option<(Matrix3<f64>, Vector3<bool>)>],
     cutoff: f64,
     parallel: bool,
 ) -> Result<EdgeResult, String> {
@@ -55,8 +55,8 @@ pub fn search_batch(
             let n_atoms_local = end - start;
 
             // Determine cell
-            let cell_inner = if let Some(h_mat) = cells[i] {
-                Cell::new(h_mat).map_err(|e| e.to_string())?
+            let cell_inner = if let Some((h_mat, pbc)) = cells[i] {
+                Cell::new(h_mat, pbc).map_err(|e| e.to_string())?
             } else {
                 let mut min_bound = Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
                 let mut max_bound =
@@ -95,7 +95,7 @@ pub fn search_batch(
                     0.0,
                     span.z + 2.0 * margin,
                 );
-                Cell::new(h_mat).map_err(|e| e.to_string())?
+                Cell::new(h_mat, Vector3::new(false, false, false)).map_err(|e| e.to_string())?
             };
 
             let perp = cell_inner.perpendicular_widths();
@@ -150,7 +150,7 @@ pub fn search_batch(
 pub fn search_batch_multi(
     positions: &[Vector3<f64>],
     batch: &[i32],
-    cells: &[Option<Matrix3<f64>>],
+    cells: &[Option<(Matrix3<f64>, Vector3<bool>)>],
     cutoffs: &[f64],
     disjoint: bool,
 ) -> Result<Vec<EdgeResult>, String> {
@@ -195,8 +195,8 @@ pub fn search_batch_multi(
             let pos_slice = &positions[start..end];
             let n_atoms_local = end - start;
 
-            let cell_inner = if let Some(h_mat) = cells[i] {
-                Cell::new(h_mat).map_err(|e| e.to_string())?
+            let cell_inner = if let Some((h_mat, pbc)) = cells[i] {
+                Cell::new(h_mat, pbc).map_err(|e| e.to_string())?
             } else {
                 let mut min_bound = Vector3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
                 let mut max_bound =
@@ -235,7 +235,7 @@ pub fn search_batch_multi(
                     0.0,
                     span.z + 2.0 * margin,
                 );
-                Cell::new(h_mat).map_err(|e| e.to_string())?
+                Cell::new(h_mat, Vector3::new(false, false, false)).map_err(|e| e.to_string())?
             };
 
             let perp = cell_inner.perpendicular_widths();
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn test_batch_search_basic() {
         let h = Matrix3::identity() * 10.0;
-        let cell = Some(h);
+        let cell = Some((h, Vector3::new(true, true, true)));
 
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0), // System 0
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_batch_search_multi_basic() {
         let h = Matrix3::identity() * 10.0;
-        let cell = Some(h);
+        let cell = Some((h, Vector3::new(true, true, true)));
 
         let positions = vec![
             Vector3::new(1.0, 1.0, 1.0), // System 0

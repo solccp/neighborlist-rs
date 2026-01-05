@@ -9,13 +9,19 @@ def test_batch_position_shape_validation():
     batch = np.zeros(10, dtype=np.int32)
     cutoff = 5.0
 
-    with pytest.raises(ValueError, match="Positions must be \(N, 3\)"):
+    with pytest.raises(ValueError, match=r"Positions must be \(N, 3\)"):
         neighborlist_rs.build_neighborlists_batch(positions, batch, None, cutoff)
 
-    with pytest.raises(ValueError, match="Positions must be \(N, 3\)"):
-        neighborlist_rs.build_neighborlists_batch_multi(
-            positions, batch, None, [cutoff]
-        )
+    with pytest.raises(ValueError, match=r"Positions must be \(N, 3\)"):
+        neighborlist_rs.build_neighborlists_batch_multi(positions, batch, None, [cutoff])
+
+def test_single_position_shape_validation():
+    # N=10, D=4 (Invalid)
+    positions = np.random.rand(10, 4)
+    cutoff = 5.0
+
+    with pytest.raises(ValueError, match=r"Positions must be \(N, 3\)"):
+        neighborlist_rs.build_neighborlists(None, positions, cutoff)
 
 
 def test_cutoff_validation():
@@ -53,7 +59,7 @@ def test_unsorted_batch_validation():
     cutoff = 5.0
 
     with pytest.raises(
-        ValueError, match="Batch IDs must be monotonic \(non-decreasing\)"
+        ValueError, match=r"Batch IDs must be monotonic \(non-decreasing\)"
     ):
         neighborlist_rs.build_neighborlists_batch(positions, batch, None, cutoff)
 

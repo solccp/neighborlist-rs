@@ -2,9 +2,9 @@
 
 ## Phase 1: Linting & Static Analysis
 - [x] Task: Initialize GitHub Actions directory and basic workflow structure in `.github/workflows/ci.yml`. [0a0cdcc]
-- [ ] Task: Implement Rust linting jobs (`rustfmt`, `clippy`).
-- [ ] Task: Implement Python linting jobs (`ruff check`, `ruff format`).
-- [ ] Task: Verify linting jobs fail on intentional errors and pass on clean code.
+- [x] Task: Implement Rust linting jobs (`rustfmt`, `clippy`). [55a7ac2]
+- [x] Task: Implement Python linting jobs (`ruff check`, `ruff format`). [b8473bc]
+- [x] Task: Verify linting jobs fail on intentional errors and pass on clean code. [55a7ac2, b8473bc]
 - [ ] Task: Conductor - User Manual Verification 'Linting & Static Analysis' (Protocol in workflow.md)
 
 ## Phase 2: Linux Matrix Build & Test

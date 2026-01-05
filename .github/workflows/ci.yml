@@ -8,8 +8,32 @@ on:
 
 jobs:
   lint:
+    name: Lint (Rust & Python)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: placeholder
-        run: echo "Basic CI structure initialized"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rustfmt Check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy Check
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Ruff Check
+        run: ruff check .
+
+      - name: Ruff Format Check
+        run: ruff format --check .

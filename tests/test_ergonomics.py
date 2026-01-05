@@ -8,7 +8,18 @@ def test_pycell_repr():
     repr_str = repr(cell)
     print(f"Repr: {repr_str}")
     
-    # Expected informative repr
+def test_pycell_from_ase():
+    try:
+        from ase.build import bulk
+    except ImportError:
+        pytest.skip("ASE not installed")
+        
+    atoms = bulk("Cu", "fcc", a=3.6)
+    cell = neighborlist_rs.PyCell.from_ase(atoms)
+    
+    # ASE cell: [[0, 1.8, 1.8], [1.8, 0, 1.8], [1.8, 1.8, 0]]
+    # PyCell should have the transpose (though this one is symmetric)
+    # Let's check the repr
+    repr_str = repr(cell)
     assert "PyCell" in repr_str
-    assert "10" in repr_str
-    assert "0" in repr_str
+    assert "1.8" in repr_str

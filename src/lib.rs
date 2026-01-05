@@ -53,6 +53,32 @@ impl PyCell {
             h[(2, 0)], h[(2, 1)], h[(2, 2)]
         )
     }
+
+    #[staticmethod]
+    fn from_ase(atoms: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let cell_obj = atoms.call_method0("get_cell")?;
+        let cell_array_obj = cell_obj.call_method0("__array__")?;
+        let cell_array: PyReadonlyArray2<f64> = cell_array_obj.extract()?;
+        let c = cell_array.as_array();
+        if c.shape() != [3, 3] {
+            return Err(pyo3::exceptions::PyValueError::new_err("Cell must be 3x3"));
+        }
+        // Transpose ASE (row-major) to internal (column-major)
+        let h_mat = Matrix3::new(
+            c[[0, 0]],
+            c[[1, 0]],
+            c[[2, 0]],
+            c[[0, 1]],
+            c[[1, 1]],
+            c[[2, 1]],
+            c[[0, 2]],
+            c[[1, 2]],
+            c[[2, 2]],
+        );
+        let inner =
+            Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(PyCell { inner })
+    }
 }
 
 enum PositionData<'a> {
@@ -158,35 +184,12 @@ fn extract_ase_data<'py>(
         ));
     }
 
-    // 3. Extract Cell
-    let cell_obj = atoms.call_method0("get_cell")?;
-    let cell_array_obj = cell_obj.call_method0("__array__")?;
-    let cell_array: PyReadonlyArray2<f64> = cell_array_obj.extract()?;
-
-    // 4. Handle PBC logic
+    // 3. Handle PBC logic
     let all_periodic = pbc.iter().all(|&x| x);
     let none_periodic = pbc.iter().all(|&x| !x);
 
     let py_cell = if all_periodic {
-        let c = cell_array.as_array();
-        if c.shape() != [3, 3] {
-            return Err(pyo3::exceptions::PyValueError::new_err("Cell must be 3x3"));
-        }
-        // Transpose ASE (row-major) to internal (column-major)
-        let h_mat = Matrix3::new(
-            c[[0, 0]],
-            c[[1, 0]],
-            c[[2, 0]],
-            c[[0, 1]],
-            c[[1, 1]],
-            c[[2, 1]],
-            c[[0, 2]],
-            c[[1, 2]],
-            c[[2, 2]],
-        );
-        let inner =
-            Cell::new(h_mat).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        Some(PyCell { inner })
+        Some(PyCell::from_ase(atoms)?)
     } else if none_periodic {
         None
     } else {

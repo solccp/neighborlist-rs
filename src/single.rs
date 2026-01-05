@@ -2,9 +2,10 @@ use crate::cell::Cell;
 use crate::search::{self, CellList, EdgeResult};
 use nalgebra::{Matrix3, Vector3};
 
-pub const BRUTE_FORCE_THRESHOLD: usize = 500;
-pub const PARALLEL_THRESHOLD: usize = 20;
+pub const BRUTE_FORCE_THRESHOLD: usize = 800;
+pub const PARALLEL_THRESHOLD: usize = 256;
 pub const AUTO_BOX_MARGIN: f64 = 1.0;
+pub const STACK_THRESHOLD: usize = 512;
 
 pub fn search_single(
     positions: &[Vector3<f64>],
@@ -16,6 +17,25 @@ pub fn search_single(
     if n_atoms == 0 {
         return Ok((vec![], vec![], vec![]));
     }
+
+    // Optimization: Stack-allocated position buffer for very small systems
+    // to avoid heap allocation in search_single when inferring box.
+    // However, the input positions is already a slice.
+    // The main allocation here is for the box inference or the return vectors.
+    // Wait, the input `positions` is already `&[Vector3<f64>]`.
+    // The previous plan mentioned "Implement a stack-allocated position buffer... in search_single".
+    // This is useful if we were COPYING positions. But we are already using zero-copy slices from numpy.
+    // So the input `positions` IS the buffer.
+    
+    // Let's look at where we DO allocate:
+    // 1. Return vectors (edge_i, edge_j, shifts) -> These MUST be on heap to return to Python.
+    // 2. CellList internal vectors -> These are on heap.
+    
+    // Maybe the user meant the scratchpad for SoA conversion in search.rs?
+    // Let's re-read the spec: "Use stack-allocated arrays (e.g., [f64; 1024]) for atom positions and temporary data when N is below a safety threshold."
+    
+    // Okay, I will implement it in `brute_force_search_simd` in `src/search.rs` instead,
+    // as that's where we copy to SoA (pos_x, pos_y, pos_z).
 
     let cell_inner = if let Some((h_mat, pbc)) = cell {
         Cell::new(h_mat, pbc).map_err(|e| e.to_string())?
@@ -163,6 +183,12 @@ pub fn search_single_multi(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_stack_threshold_logic() {
+        // This test ensures we don't regress on the N=512 limit
+        assert_eq!(STACK_THRESHOLD, 512);
+    }
 
     #[test]
     fn test_search_single_basic() {

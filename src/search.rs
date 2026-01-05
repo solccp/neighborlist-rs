@@ -991,34 +991,54 @@ pub fn brute_force_search_simd(
     let mut edge_j = Vec::with_capacity(capacity);
     let mut shifts = Vec::with_capacity(capacity * 3);
 
-    // Extract raw pointers or use slice indexing.
-    // For maximizing SIMD, we want structure-of-arrays (SoA) layout, but input is AoS (Vector3).
-    // We can load AoS into registers, but it's messy for distance calculation.
-    // Alternatively, we can unpack to temp SoA vectors on stack if N is small?
-    // Or just gather-load from the slice. `wide` doesn't support gather easily.
-    // Given N < 500, we can copy to SoA vectors (x, y, z) on heap or stack.
-    // This copy is O(N) which is negligible vs O(N^2).
+    const STACK_LIMIT: usize = 512;
+    
+    // Stack-allocated scratchpad for SoA conversion
+    let (pos_x, pos_y, pos_z) = if n <= STACK_LIMIT {
+        let mut x = [0.0; STACK_LIMIT];
+        let mut y = [0.0; STACK_LIMIT];
+        let mut z = [0.0; STACK_LIMIT];
+        for (i, p) in positions.iter().enumerate() {
+            x[i] = p.x;
+            y[i] = p.y;
+            z[i] = p.z;
+        }
+        (PositionSoA::Stack(x), PositionSoA::Stack(y), PositionSoA::Stack(z))
+    } else {
+        let mut x = Vec::with_capacity(n);
+        let mut y = Vec::with_capacity(n);
+        let mut z = Vec::with_capacity(n);
+        for p in positions {
+            x.push(p.x);
+            y.push(p.y);
+            z.push(p.z);
+        }
+        (PositionSoA::Heap(x), PositionSoA::Heap(y), PositionSoA::Heap(z))
+    };
 
-    let mut pos_x = Vec::with_capacity(n);
-    let mut pos_y = Vec::with_capacity(n);
-    let mut pos_z = Vec::with_capacity(n);
-
-    for p in positions {
-        pos_x.push(p.x);
-        pos_y.push(p.y);
-        pos_z.push(p.z);
-    }
+    let px = match &pos_x {
+        PositionSoA::Stack(s) => &s[..n],
+        PositionSoA::Heap(v) => &v[..n],
+    };
+    let py = match &pos_y {
+        PositionSoA::Stack(s) => &s[..n],
+        PositionSoA::Heap(v) => &v[..n],
+    };
+    let pz = match &pos_z {
+        PositionSoA::Stack(s) => &s[..n],
+        PositionSoA::Heap(v) => &v[..n],
+    };
 
     for i in 0..n {
-        let pix = f64x4::from(pos_x[i]);
-        let piy = f64x4::from(pos_y[i]);
-        let piz = f64x4::from(pos_z[i]);
+        let pix = f64x4::from(px[i]);
+        let piy = f64x4::from(py[i]);
+        let piz = f64x4::from(pz[i]);
 
         let mut j = i + 1;
         while j + 4 <= n {
-            let pjx = f64x4::from(&pos_x[j..j + 4]);
-            let pjy = f64x4::from(&pos_y[j..j + 4]);
-            let pjz = f64x4::from(&pos_z[j..j + 4]);
+            let pjx = f64x4::from(<[f64; 4]>::try_from(&px[j..j + 4]).unwrap());
+            let pjy = f64x4::from(<[f64; 4]>::try_from(&py[j..j + 4]).unwrap());
+            let pjz = f64x4::from(<[f64; 4]>::try_from(&pz[j..j + 4]).unwrap());
 
             let dx = pjx - pix;
             let dy = pjy - piy;
@@ -1027,7 +1047,6 @@ pub fn brute_force_search_simd(
             let d2 = dx * dx + dy * dy + dz * dz;
             let mask = d2.cmp_lt(cutoff_sq_v);
             
-            // Check if any bit is set
             if mask.any() {
                 let m_array: [u64; 4] = bytemuck::cast(mask);
                 for k in 0..4 {
@@ -1045,9 +1064,9 @@ pub fn brute_force_search_simd(
 
         // Tail loop
         for k in j..n {
-            let dx = pos_x[k] - pos_x[i];
-            let dy = pos_y[k] - pos_y[i];
-            let dz = pos_z[k] - pos_z[i];
+            let dx = px[k] - px[i];
+            let dy = py[k] - py[i];
+            let dz = pz[k] - pz[i];
             if dx * dx + dy * dy + dz * dz < cutoff_sq {
                 edge_i.push(i as i64);
                 edge_j.push(k as i64);
@@ -1059,6 +1078,11 @@ pub fn brute_force_search_simd(
     }
 
     (edge_i, edge_j, shifts)
+}
+
+enum PositionSoA {
+    Stack([f64; 512]),
+    Heap(Vec<f64>),
 }
 
 pub fn brute_force_search(

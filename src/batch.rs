@@ -4,8 +4,8 @@ use nalgebra::{Matrix3, Vector3};
 use rayon::prelude::*;
 
 // Constants shared with lib.rs (or defined here and used there)
-pub const BRUTE_FORCE_THRESHOLD: usize = 500;
-pub const PARALLEL_THRESHOLD: usize = 20;
+pub const BRUTE_FORCE_THRESHOLD: usize = 800;
+pub const PARALLEL_THRESHOLD: usize = 256;
 pub const AUTO_BOX_MARGIN: f64 = 1.0;
 
 pub fn search_batch(

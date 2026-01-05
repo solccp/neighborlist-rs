@@ -17,7 +17,7 @@ This track aims to improve the codebase across three main dimensions:
 - [x] **Inner-Loop SIMD**: Implement an explicit SIMD kernel for the distance-squared calculation using the `wide` crate. [Pre-existing]
 - [x] **Benchmarking Verification**: Verify speedups using `benchmarks/scaling.py`. [9ff42f6]
 
-## Phase 3: Validation & Robustness
+## Phase 3: Validation & Robustness [checkpoint: dec07b0]
 - [~] **Input Validation**:
     - [x] Enforce `(N, 3)` shape for positions in batch bindings (`src/lib.rs`). [5d2ad5b]
     - [x] Validate `cutoff` is finite and positive. [3d34f1b]

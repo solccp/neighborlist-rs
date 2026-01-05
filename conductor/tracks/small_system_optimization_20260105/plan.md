@@ -5,10 +5,10 @@
 - [x] Task: Write property tests in `src/search.rs` specifically for isolated systems to ensure edge-case correctness (e.g., all atoms at origin, atoms very far apart). [752cceb]
 - [ ] Task: Conductor - User Manual Verification 'Baseline & Regression Testing' (Protocol in workflow.md)
 
-## Phase 2: SIMD Brute-Force Kernel
-- [x] Task: Implement `brute_force_search_simd` in `src/search.rs` using `f64x4` from the `wide` crate for isolated systems. [Commit SHA Pending]
-- [x] Task: Integrate the SIMD kernel into the `brute_force_search_full` entry point. [Commit SHA Pending]
-- [~] Task: Write unit tests to verify `brute_force_search_simd` produces bit-identical results to the serial implementation.
+## Phase 2: SIMD Brute-Force Kernel [checkpoint: ceb0a04]
+- [x] Task: Implement `brute_force_search_simd` in `src/search.rs` using `f64x4` from the `wide` crate for isolated systems. [ceb0a04]
+- [x] Task: Integrate the SIMD kernel into the `brute_force_search_full` entry point. [ceb0a04]
+- [x] Task: Write unit tests to verify `brute_force_search_simd` produces bit-identical results to the serial implementation. [ceb0a04]
 - [ ] Task: Conductor - User Manual Verification 'SIMD Brute-Force Kernel' (Protocol in workflow.md)
 
 ## Phase 3: Memory & Threshold Optimization

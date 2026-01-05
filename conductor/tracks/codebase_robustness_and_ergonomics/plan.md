@@ -14,8 +14,8 @@ This track aims to improve the codebase across three main dimensions:
 ## Phase 2: Performance Optimizations
 - [x] **Zero-Copy Positions**: Use `bytemuck` to cast NumPy position arrays directly to `&[Vector3<f64>]` or `&[[f64; 3]]` to eliminate the $O(N)$ copy in `src/lib.rs`. [5d2ad5b]
 - [x] **Remove Hot-Path Allocations**: Precompute offset tuples in `CellList` or use stack-bounded `ArrayVec` in `src/search.rs` to eliminate repeated `Vec` allocations during neighbor search. [5c5205d]
-- [ ] **Inner-Loop SIMD**: Implement an explicit SIMD kernel for the distance-squared calculation using the `wide` crate.
-- [ ] **Benchmarking Verification**: Verify speedups using `benchmarks/scaling.py`.
+- [x] **Inner-Loop SIMD**: Implement an explicit SIMD kernel for the distance-squared calculation using the `wide` crate. [Pre-existing]
+- [x] **Benchmarking Verification**: Verify speedups using `benchmarks/scaling.py`. [9ff42f6]
 
 ## Phase 3: Validation & Robustness
 - [ ] **Input Validation**:

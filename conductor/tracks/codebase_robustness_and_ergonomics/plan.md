@@ -18,9 +18,9 @@ This track aims to improve the codebase across three main dimensions:
 - [x] **Benchmarking Verification**: Verify speedups using `benchmarks/scaling.py`. [9ff42f6]
 
 ## Phase 3: Validation & Robustness
-- [ ] **Input Validation**:
-    - [ ] Enforce `(N, 3)` shape for positions in batch bindings (`src/lib.rs`).
-    - [ ] Validate `cutoff` is finite and positive.
+- [~] **Input Validation**:
+    - [x] Enforce `(N, 3)` shape for positions in batch bindings (`src/lib.rs`). [5d2ad5b]
+    - [x] Validate `cutoff` is finite and positive. [3d34f1b]
     - [ ] Validate batch IDs are sorted/monotonic or handle unsorted input.
 - [ ] **Edge Cases & Testing**:
     - [ ] Add unit tests for invalid cutoffs and unsorted batch IDs.

@@ -22,7 +22,7 @@
 - [ ] Task: Conductor - User Manual Verification 'Cross-Platform Expansion' (Protocol in workflow.md)
 
 ## Phase 4: Benchmarks & Caching
-- [ ] Task: Implement caching for `~/.cargo/registry` and `~/.cache/pip`.
-- [ ] Task: Add a dedicated job to run `benchmarks/small_systems.py`.
-- [ ] Task: Verify that CI execution time is optimized and benchmarks are recorded.
+- [x] Task: Implement caching for `~/.cargo/registry` and `~/.cache/pip`. [c645049]
+- [x] Task: Add a dedicated job to run `benchmarks/small_systems.py`. [c645049]
+- [x] Task: Verify that CI execution time is optimized and benchmarks are recorded. [c645049]
 - [ ] Task: Conductor - User Manual Verification 'Benchmarks & Caching' (Protocol in workflow.md)

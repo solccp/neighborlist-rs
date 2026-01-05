@@ -28,7 +28,7 @@ This track aims to improve the codebase across three main dimensions:
     - [~] **Dtype Alignment**: Align `edge_index` documentation with implementation (decide on `int64` vs `uint64`).
 
 ## Phase 4: Ergonomics & Features
-- [ ] **Python Repr**: Add `__repr__` to `PyCell` for informative Python debugging.
+- [x] **Python Repr**: Add `__repr__` to `PyCell` for informative Python debugging. [d3ecf55]
 - [ ] **ASE Integration**:
     - [ ] `PyCell.from_ase(atoms)`: Implement factory method.
     - [ ] Support Mixed PBC in ASE conversion.

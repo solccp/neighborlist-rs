@@ -167,8 +167,8 @@ mod tests {
 
     #[test]
     fn test_stack_threshold_logic() {
-        // This test ensures we don't regress on the N=512 limit
-        assert_eq!(STACK_THRESHOLD, 512);
+        // This test ensures the auto-tuning produced one of our expected profiles
+        assert!(STACK_THRESHOLD == 1000 || STACK_THRESHOLD == 800 || STACK_THRESHOLD == 400);
     }
 
     #[test]

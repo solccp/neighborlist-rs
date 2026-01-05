@@ -977,6 +977,8 @@ fn interleave_3(mut x: u64) -> u64 {
     x
 }
 
+include!(concat!(env!("OUT_DIR"), "/tuned_constants.rs"));
+
 pub fn brute_force_search_simd(
     positions: &[Vector3<f64>],
     cutoff: f64,
@@ -991,13 +993,11 @@ pub fn brute_force_search_simd(
     let mut edge_j = Vec::with_capacity(capacity);
     let mut shifts = Vec::with_capacity(capacity * 3);
 
-    const STACK_LIMIT: usize = 512;
-    
     // Stack-allocated scratchpad for SoA conversion
-    let (pos_x, pos_y, pos_z) = if n <= STACK_LIMIT {
-        let mut x = [0.0; STACK_LIMIT];
-        let mut y = [0.0; STACK_LIMIT];
-        let mut z = [0.0; STACK_LIMIT];
+    let (pos_x, pos_y, pos_z) = if n <= STACK_THRESHOLD {
+        let mut x = [0.0; STACK_THRESHOLD];
+        let mut y = [0.0; STACK_THRESHOLD];
+        let mut z = [0.0; STACK_THRESHOLD];
         for (i, p) in positions.iter().enumerate() {
             x[i] = p.x;
             y[i] = p.y;
@@ -1081,7 +1081,7 @@ pub fn brute_force_search_simd(
 }
 
 enum PositionSoA {
-    Stack([f64; 512]),
+    Stack([f64; STACK_THRESHOLD]),
     Heap(Vec<f64>),
 }
 

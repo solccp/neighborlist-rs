@@ -18,6 +18,15 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Rustfmt Check
         run: cargo fmt --all -- --check
 
@@ -54,6 +63,15 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-test-${{ matrix.python-version }}-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Build and Test (Maturin)
         uses: PyO3/maturin-action@v1
         with:
@@ -66,6 +84,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
+
       - name: Install dependencies
         run: |
           pip install pytest numpy ase
@@ -73,3 +97,40 @@ jobs:
 
       - name: Run pytest
         run: pytest tests/
+
+  benchmark:
+    name: Benchmark (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-bench-${{ hashFiles('**/pyproject.toml') }}
+
+      - name: Install dependencies
+        run: |
+          pip install maturin pytest numpy ase vesin
+          maturin develop --release
+
+      - name: Run benchmarks
+        run: python benchmarks/small_systems.py

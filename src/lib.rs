@@ -11,8 +11,9 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 
 use crate::cell::Cell;
 use nalgebra::{Matrix3, Vector3};
-use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ndarray};
+use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, PyUntypedArrayMethods, ndarray};
 use pyo3::types::PyDict;
+use std::borrow::Cow;
 use tracing_subscriber::EnvFilter;
 
 #[pyclass]
@@ -44,6 +45,44 @@ impl PyCell {
     }
 }
 
+enum PositionData<'a> {
+    Slice(&'a [Vector3<f64>]),
+    Owned(Vec<Vector3<f64>>),
+}
+
+impl<'a> std::ops::Deref for PositionData<'a> {
+    type Target = [Vector3<f64>];
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Slice(s) => s,
+            Self::Owned(v) => v,
+        }
+    }
+}
+
+fn get_positions<'a>(positions: &'a PyReadonlyArray2<'a, f64>) -> PyResult<PositionData<'a>> {
+    if positions.shape()[1] != 3 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Positions must be (N, 3)",
+        ));
+    }
+
+    if let Ok(slice) = positions.as_slice() {
+        if let Ok(cast_slice) = bytemuck::try_cast_slice(slice) {
+            return Ok(PositionData::Slice(cast_slice));
+        }
+    }
+
+    // Fallback: Copy
+    let pos_view = positions.as_array();
+    let n_atoms = pos_view.shape()[0];
+    let mut pos_vec = Vec::with_capacity(n_atoms);
+    for row in pos_view.rows() {
+        pos_vec.push(Vector3::new(row[0], row[1], row[2]));
+    }
+    Ok(PositionData::Owned(pos_vec))
+}
+
 #[pyfunction]
 #[pyo3(signature = (cell, positions, cutoff, parallel=true))]
 fn build_neighborlists<'py>(
@@ -53,13 +92,8 @@ fn build_neighborlists<'py>(
     cutoff: f64,
     parallel: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let pos_view = positions.as_array();
-    let n_atoms = pos_view.shape()[0];
-    if pos_view.shape()[1] != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Positions must be (N, 3)",
-        ));
-    }
+    let pos_data = get_positions(&positions)?;
+    let n_atoms = pos_data.len();
 
     if n_atoms == 0 {
         let dict = PyDict::new(py);
@@ -74,15 +108,10 @@ fn build_neighborlists<'py>(
         return Ok(dict);
     }
 
-    let mut pos_vec = Vec::with_capacity(n_atoms);
-    for row in pos_view.rows() {
-        pos_vec.push(Vector3::new(row[0], row[1], row[2]));
-    }
-
     let cell_mat = cell.map(|c| c.inner.h());
 
     let (mut edge_i, edge_j, shifts) =
-        single::search_single(&pos_vec, cell_mat.copied(), cutoff, parallel)
+        single::search_single(&pos_data, cell_mat.copied(), cutoff, parallel)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     let dict = PyDict::new(py);
@@ -188,13 +217,9 @@ fn build_neighborlists_multi<'py>(
     labels: Option<Vec<String>>,
     disjoint: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let pos_view = positions.as_array();
-    let n_atoms = pos_view.shape()[0];
-    if pos_view.shape()[1] != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Positions must be (N, 3)",
-        ));
-    }
+    let pos_data = get_positions(&positions)?;
+    let n_atoms = pos_data.len();
+
     if cutoffs.is_empty() {
         return Ok(PyDict::new(py));
     }
@@ -225,14 +250,9 @@ fn build_neighborlists_multi<'py>(
         return Ok(result_dict);
     }
 
-    let mut pos_vec = Vec::with_capacity(n_atoms);
-    for row in pos_view.rows() {
-        pos_vec.push(Vector3::new(row[0], row[1], row[2]));
-    }
-
     let cell_mat = cell.map(|c| c.inner.h());
 
-    let results = single::search_single_multi(&pos_vec, cell_mat.copied(), &cutoffs, disjoint)
+    let results = single::search_single_multi(&pos_data, cell_mat.copied(), &cutoffs, disjoint)
         .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     let result_dict = PyDict::new(py);
@@ -272,9 +292,9 @@ fn build_neighborlists_batch<'py>(
     cutoff: f64,
     parallel: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let pos_view = positions.as_array();
+    let pos_data = get_positions(&positions)?;
     let batch_view = batch.as_array();
-    let n_total = pos_view.shape()[0];
+    let n_total = pos_data.len();
 
     if batch_view.len() != n_total {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -295,14 +315,12 @@ fn build_neighborlists_batch<'py>(
         return Ok(dict);
     }
 
-    let mut pos_vec = Vec::with_capacity(n_total);
-    for row in pos_view.rows() {
-        pos_vec.push(Vector3::new(row[0], row[1], row[2]));
-    }
-
-    let batch_slice = batch_view
-        .as_slice()
-        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Batch array must be contiguous"))?;
+    let batch_slice_cow: Cow<[i32]> = if let Some(s) = batch_view.as_slice() {
+        Cow::Borrowed(s)
+    } else {
+        Cow::Owned(batch_view.iter().copied().collect())
+    };
+    let batch_slice = batch_slice_cow.as_ref();
 
     let mut n_systems = 1;
     let mut current_batch_val = batch_slice[0];
@@ -347,7 +365,7 @@ fn build_neighborlists_batch<'py>(
     };
 
     let (mut final_edge_i, final_edge_j, final_shift) =
-        batch::search_batch(&pos_vec, batch_slice, &cell_matrices, cutoff, parallel)
+        batch::search_batch(&pos_data, batch_slice, &cell_matrices, cutoff, parallel)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     let total_edges = final_edge_i.len();
@@ -373,9 +391,9 @@ fn build_neighborlists_batch_multi<'py>(
     labels: Option<Vec<String>>,
     disjoint: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let pos_view = positions.as_array();
+    let pos_data = get_positions(&positions)?;
     let batch_view = batch.as_array();
-    let n_total = pos_view.shape()[0];
+    let n_total = pos_data.len();
 
     if batch_view.len() != n_total {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -393,14 +411,12 @@ fn build_neighborlists_batch_multi<'py>(
         ));
     }
 
-    let mut pos_vec = Vec::with_capacity(n_total);
-    for row in pos_view.rows() {
-        pos_vec.push(Vector3::new(row[0], row[1], row[2]));
-    }
-
-    let batch_slice = batch_view
-        .as_slice()
-        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Batch array must be contiguous"))?;
+    let batch_slice_cow: Cow<[i32]> = if let Some(s) = batch_view.as_slice() {
+        Cow::Borrowed(s)
+    } else {
+        Cow::Owned(batch_view.iter().copied().collect())
+    };
+    let batch_slice = batch_slice_cow.as_ref();
 
     let mut n_systems = 1;
     let mut current_batch_val = batch_slice[0];
@@ -445,7 +461,7 @@ fn build_neighborlists_batch_multi<'py>(
     };
 
     let results =
-        batch::search_batch_multi(&pos_vec, batch_slice, &cell_matrices, &cutoffs, disjoint)
+        batch::search_batch_multi(&pos_data, batch_slice, &cell_matrices, &cutoffs, disjoint)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     let result_dict = PyDict::new(py);

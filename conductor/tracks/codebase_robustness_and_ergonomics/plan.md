@@ -29,8 +29,8 @@ This track aims to improve the codebase across three main dimensions:
 
 ## Phase 4: Ergonomics & Features
 - [x] **Python Repr**: Add `__repr__` to `PyCell` for informative Python debugging. [d3ecf55]
-- [ ] **ASE Integration**:
-    - [ ] `PyCell.from_ase(atoms)`: Implement factory method.
+- [~] **ASE Integration**:
+    - [x] `PyCell.from_ase(atoms)`: Implement factory method. [00d5d12]
     - [ ] Support Mixed PBC in ASE conversion.
 - [ ] **Mixed PBC Support**: Extend `Cell` and `CellList` to handle periodic and non-periodic dimensions independently.
 - [ ] **Python Type Stubs**: Generate a `neighborlist_rs.pyi` file for IDE autocompletion and static type checking.

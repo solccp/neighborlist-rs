@@ -340,6 +340,11 @@ fn build_neighborlists_batch<'py>(
     let mut n_systems = 1;
     let mut current_batch_val = batch_slice[0];
     for &b in batch_slice.iter().skip(1) {
+        if b < current_batch_val {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Batch IDs must be monotonic (non-decreasing)",
+            ));
+        }
         if b != current_batch_val {
             n_systems += 1;
             current_batch_val = b;
@@ -442,6 +447,11 @@ fn build_neighborlists_batch_multi<'py>(
     let mut n_systems = 1;
     let mut current_batch_val = batch_slice[0];
     for &b in batch_slice.iter().skip(1) {
+        if b < current_batch_val {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Batch IDs must be monotonic (non-decreasing)",
+            ));
+        }
         if b != current_batch_val {
             n_systems += 1;
             current_batch_val = b;

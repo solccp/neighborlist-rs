@@ -39,3 +39,12 @@ def test_multi_cutoff_validation():
     # One invalid
     with pytest.raises(ValueError, match="All cutoffs must be positive and finite"):
         neighborlist_rs.build_neighborlists_multi(None, positions, [1.0, -2.0, 3.0])
+
+def test_unsorted_batch_validation():
+    positions = np.random.rand(10, 3)
+    # Unsorted batch ids: [0, 0, 1, 1, 0, 0]
+    batch = np.array([0, 0, 1, 1, 0, 0, 1, 1, 2, 2], dtype=np.int32)
+    cutoff = 5.0
+    
+    with pytest.raises(ValueError, match="Batch IDs must be monotonic \(non-decreasing\)"):
+        neighborlist_rs.build_neighborlists_batch(positions, batch, None, cutoff)

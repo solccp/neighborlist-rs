@@ -305,7 +305,7 @@ fn build_neighborlists_multi<'py>(
 }
 
 fn is_zero_matrix(m: &ndarray::ArrayView2<f64>) -> bool {
-    m.iter().all(|&x| x == 0.0)
+    !m.iter().any(|&x| x != 0.0)
 }
 
 #[pyfunction]

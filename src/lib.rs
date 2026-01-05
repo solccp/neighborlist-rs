@@ -43,6 +43,16 @@ impl PyCell {
         let wrapped = self.inner.wrap(&p);
         [wrapped.x, wrapped.y, wrapped.z]
     }
+
+    fn __repr__(&self) -> String {
+        let h = self.inner.h();
+        format!(
+            "PyCell(h=[[{}, {}, {}], [{}, {}, {}], [{}, {}, {}]])",
+            h[(0, 0)], h[(0, 1)], h[(0, 2)],
+            h[(1, 0)], h[(1, 1)], h[(1, 2)],
+            h[(2, 0)], h[(2, 1)], h[(2, 2)]
+        )
+    }
 }
 
 enum PositionData<'a> {

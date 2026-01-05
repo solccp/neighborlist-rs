@@ -12,6 +12,58 @@ const PARALLEL_TASKS_PER_THREAD: usize = 64;
 
 pub type EdgeResult = (Vec<i64>, Vec<i64>, Vec<i32>);
 
+/// Helper to avoid small Vec allocations in hot loops.
+/// Stores offset data: (bin_index, shift_vector, shift_integer).
+struct OffsetList {
+    stack: [(usize, Vector3<f64>, i32); 16],
+    heap: Vec<(usize, Vector3<f64>, i32)>,
+    use_stack: bool,
+    len: usize,
+}
+
+impl OffsetList {
+    fn new() -> Self {
+        Self {
+            stack: [(0, Vector3::zeros(), 0); 16],
+            heap: Vec::new(),
+            use_stack: true,
+            len: 0,
+        }
+    }
+
+    fn prepare(&mut self, center_bin: i32, n_search: i32, num_bins: i32, h_col: Vector3<f64>) {
+        let required = (2 * n_search + 1) as usize;
+        if required > 16 {
+            self.use_stack = false;
+            self.heap.clear();
+            self.heap.reserve(required);
+        } else {
+            self.use_stack = true;
+            self.len = 0;
+        }
+
+        for d in -n_search..=n_search {
+            let (nb, shift) = div_mod(center_bin + d, num_bins);
+            let vec = h_col * (shift as f64);
+            let item = (nb, vec, shift);
+            if self.use_stack {
+                self.stack[self.len] = item;
+                self.len += 1;
+            } else {
+                self.heap.push(item);
+            }
+        }
+    }
+
+    fn as_slice(&self) -> &[(usize, Vector3<f64>, i32)] {
+        if self.use_stack {
+            &self.stack[..self.len]
+        } else {
+            &self.heap
+        }
+    }
+}
+
 pub struct CellList {
     /// particles[sorted_idx] = original_idx
     particles: Vec<usize>,
@@ -380,28 +432,21 @@ impl CellList {
         let i_orig = self.particles[i];
         let mut count = 0;
 
-        // Pre-calculate shift vectors
-        let mut sx_offsets = Vec::with_capacity((2 * self.n_search.x + 1) as usize);
-        for dx in -self.n_search.x..=self.n_search.x {
-            let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
-            sx_offsets.push((nbx, h_matrix.column(0) * sx as f64, sx));
-        }
-        let mut sy_offsets = Vec::with_capacity((2 * self.n_search.y + 1) as usize);
-        for dy in -self.n_search.y..=self.n_search.y {
-            let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
-            sy_offsets.push((nby, h_matrix.column(1) * sy as f64, sy));
-        }
-        let mut sz_offsets = Vec::with_capacity((2 * self.n_search.z + 1) as usize);
-        for dz in -self.n_search.z..=self.n_search.z {
-            let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
-            sz_offsets.push((nbz, h_matrix.column(2) * sz as f64, sz));
-        }
+        // Pre-calculate shift vectors using OffsetList
+        let mut sx_list = OffsetList::new();
+        sx_list.prepare(bx, self.n_search.x, self.num_bins.x as i32, h_matrix.column(0).into());
+        
+        let mut sy_list = OffsetList::new();
+        sy_list.prepare(by, self.n_search.y, self.num_bins.y as i32, h_matrix.column(1).into());
+
+        let mut sz_list = OffsetList::new();
+        sz_list.prepare(bz, self.n_search.z, self.num_bins.z as i32, h_matrix.column(2).into());
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
 
-        for (nbx, ox, _sx) in &sx_offsets {
-            for (nby, oy, _sy) in &sy_offsets {
-                for (nbz, oz, _sz) in &sz_offsets {
+        for (nbx, ox, _sx) in sx_list.as_slice() {
+            for (nby, oy, _sy) in sy_list.as_slice() {
+                for (nbz, oz, _sz) in sz_list.as_slice() {
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -489,28 +534,21 @@ impl CellList {
 
         let i_orig = self.particles[i];
 
-        // Pre-calculate shift vectors
-        let mut sx_offsets = Vec::with_capacity((2 * self.n_search.x + 1) as usize);
-        for dx in -self.n_search.x..=self.n_search.x {
-            let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
-            sx_offsets.push((nbx, h_matrix.column(0) * sx as f64, sx));
-        }
-        let mut sy_offsets = Vec::with_capacity((2 * self.n_search.y + 1) as usize);
-        for dy in -self.n_search.y..=self.n_search.y {
-            let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
-            sy_offsets.push((nby, h_matrix.column(1) * sy as f64, sy));
-        }
-        let mut sz_offsets = Vec::with_capacity((2 * self.n_search.z + 1) as usize);
-        for dz in -self.n_search.z..=self.n_search.z {
-            let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
-            sz_offsets.push((nbz, h_matrix.column(2) * sz as f64, sz));
-        }
+        // Pre-calculate shift vectors using OffsetList
+        let mut sx_list = OffsetList::new();
+        sx_list.prepare(bx, self.n_search.x, self.num_bins.x as i32, h_matrix.column(0).into());
+        
+        let mut sy_list = OffsetList::new();
+        sy_list.prepare(by, self.n_search.y, self.num_bins.y as i32, h_matrix.column(1).into());
+
+        let mut sz_list = OffsetList::new();
+        sz_list.prepare(bz, self.n_search.z, self.num_bins.z as i32, h_matrix.column(2).into());
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
 
-        for (nbx, ox, sx) in &sx_offsets {
-            for (nby, oy, sy) in &sy_offsets {
-                for (nbz, oz, sz) in &sz_offsets {
+        for (nbx, ox, sx) in sx_list.as_slice() {
+            for (nby, oy, sy) in sy_list.as_slice() {
+                for (nbz, oz, sz) in sz_list.as_slice() {
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -603,28 +641,21 @@ impl CellList {
 
         let i_orig = self.particles[i];
 
-        // Pre-calculate shift vectors
-        let mut sx_offsets = Vec::with_capacity((2 * self.n_search.x + 1) as usize);
-        for dx in -self.n_search.x..=self.n_search.x {
-            let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
-            sx_offsets.push((nbx, h_matrix.column(0) * sx as f64, sx));
-        }
-        let mut sy_offsets = Vec::with_capacity((2 * self.n_search.y + 1) as usize);
-        for dy in -self.n_search.y..=self.n_search.y {
-            let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
-            sy_offsets.push((nby, h_matrix.column(1) * sy as f64, sy));
-        }
-        let mut sz_offsets = Vec::with_capacity((2 * self.n_search.z + 1) as usize);
-        for dz in -self.n_search.z..=self.n_search.z {
-            let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
-            sz_offsets.push((nbz, h_matrix.column(2) * sz as f64, sz));
-        }
+        // Pre-calculate shift vectors using OffsetList
+        let mut sx_list = OffsetList::new();
+        sx_list.prepare(bx, self.n_search.x, self.num_bins.x as i32, h_matrix.column(0).into());
+        
+        let mut sy_list = OffsetList::new();
+        sy_list.prepare(by, self.n_search.y, self.num_bins.y as i32, h_matrix.column(1).into());
+
+        let mut sz_list = OffsetList::new();
+        sz_list.prepare(bz, self.n_search.z, self.num_bins.z as i32, h_matrix.column(2).into());
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
 
-        for (nbx, ox, _sx) in &sx_offsets {
-            for (nby, oy, _sy) in &sy_offsets {
-                for (nbz, oz, _sz) in &sz_offsets {
+        for (nbx, ox, _sx) in sx_list.as_slice() {
+            for (nby, oy, _sy) in sy_list.as_slice() {
+                for (nbz, oz, _sz) in sz_list.as_slice() {
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -734,28 +765,21 @@ impl CellList {
         let i_orig = self.particles[i];
         let mut local_counts = vec![0usize; sorted_cutoffs_sq.len()];
 
-        // Pre-calculate shift vectors
-        let mut sx_offsets = Vec::with_capacity((2 * self.n_search.x + 1) as usize);
-        for dx in -self.n_search.x..=self.n_search.x {
-            let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
-            sx_offsets.push((nbx, h_matrix.column(0) * sx as f64, sx));
-        }
-        let mut sy_offsets = Vec::with_capacity((2 * self.n_search.y + 1) as usize);
-        for dy in -self.n_search.y..=self.n_search.y {
-            let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
-            sy_offsets.push((nby, h_matrix.column(1) * sy as f64, sy));
-        }
-        let mut sz_offsets = Vec::with_capacity((2 * self.n_search.z + 1) as usize);
-        for dz in -self.n_search.z..=self.n_search.z {
-            let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
-            sz_offsets.push((nbz, h_matrix.column(2) * sz as f64, sz));
-        }
+        // Pre-calculate shift vectors using OffsetList
+        let mut sx_list = OffsetList::new();
+        sx_list.prepare(bx, self.n_search.x, self.num_bins.x as i32, h_matrix.column(0).into());
+        
+        let mut sy_list = OffsetList::new();
+        sy_list.prepare(by, self.n_search.y, self.num_bins.y as i32, h_matrix.column(1).into());
+
+        let mut sz_list = OffsetList::new();
+        sz_list.prepare(bz, self.n_search.z, self.num_bins.z as i32, h_matrix.column(2).into());
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
 
-        for (nbx, ox, sx) in &sx_offsets {
-            for (nby, oy, sy) in &sy_offsets {
-                for (nbz, oz, sz) in &sz_offsets {
+        for (nbx, ox, sx) in sx_list.as_slice() {
+            for (nby, oy, sy) in sy_list.as_slice() {
+                for (nbz, oz, sz) in sz_list.as_slice() {
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];

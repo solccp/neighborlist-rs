@@ -1,6 +1,6 @@
 # Plan: GitHub Actions CI Pipeline
 
-## Phase 1: Linting & Static Analysis
+## Phase 1: Linting & Static Analysis [checkpoint: 3cf462c]
 - [x] Task: Initialize GitHub Actions directory and basic workflow structure in `.github/workflows/ci.yml`. [0a0cdcc]
 - [x] Task: Implement Rust linting jobs (`rustfmt`, `clippy`). [55a7ac2]
 - [x] Task: Implement Python linting jobs (`ruff check`, `ruff format`). [b8473bc]

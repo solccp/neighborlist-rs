@@ -6,9 +6,9 @@
 - [ ] Task: Conductor - User Manual Verification 'Baseline & Regression Testing' (Protocol in workflow.md)
 
 ## Phase 2: SIMD Brute-Force Kernel
-- [ ] Task: Implement `brute_force_search_simd` in `src/search.rs` using `f64x4` from the `wide` crate for isolated systems.
-- [ ] Task: Integrate the SIMD kernel into the `brute_force_search_full` entry point.
-- [ ] Task: Write unit tests to verify `brute_force_search_simd` produces bit-identical results to the serial implementation.
+- [x] Task: Implement `brute_force_search_simd` in `src/search.rs` using `f64x4` from the `wide` crate for isolated systems. [Commit SHA Pending]
+- [x] Task: Integrate the SIMD kernel into the `brute_force_search_full` entry point. [Commit SHA Pending]
+- [~] Task: Write unit tests to verify `brute_force_search_simd` produces bit-identical results to the serial implementation.
 - [ ] Task: Conductor - User Manual Verification 'SIMD Brute-Force Kernel' (Protocol in workflow.md)
 
 ## Phase 3: Memory & Threshold Optimization

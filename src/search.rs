@@ -977,6 +977,90 @@ fn interleave_3(mut x: u64) -> u64 {
     x
 }
 
+pub fn brute_force_search_simd(
+    positions: &[Vector3<f64>],
+    cutoff: f64,
+) -> EdgeResult {
+    let n = positions.len();
+    let cutoff_sq = cutoff * cutoff;
+    let cutoff_sq_v = f64x4::from(cutoff_sq);
+
+    // Estimate capacity: avg 50 neighbors? for small system maybe less.
+    let capacity = n * BRUTE_FORCE_CAPACITY_FACTOR;
+    let mut edge_i = Vec::with_capacity(capacity);
+    let mut edge_j = Vec::with_capacity(capacity);
+    let mut shifts = Vec::with_capacity(capacity * 3);
+
+    // Extract raw pointers or use slice indexing.
+    // For maximizing SIMD, we want structure-of-arrays (SoA) layout, but input is AoS (Vector3).
+    // We can load AoS into registers, but it's messy for distance calculation.
+    // Alternatively, we can unpack to temp SoA vectors on stack if N is small?
+    // Or just gather-load from the slice. `wide` doesn't support gather easily.
+    // Given N < 500, we can copy to SoA vectors (x, y, z) on heap or stack.
+    // This copy is O(N) which is negligible vs O(N^2).
+
+    let mut pos_x = Vec::with_capacity(n);
+    let mut pos_y = Vec::with_capacity(n);
+    let mut pos_z = Vec::with_capacity(n);
+
+    for p in positions {
+        pos_x.push(p.x);
+        pos_y.push(p.y);
+        pos_z.push(p.z);
+    }
+
+    for i in 0..n {
+        let pix = f64x4::from(pos_x[i]);
+        let piy = f64x4::from(pos_y[i]);
+        let piz = f64x4::from(pos_z[i]);
+
+        let mut j = i + 1;
+        while j + 4 <= n {
+            let pjx = f64x4::from(&pos_x[j..j + 4]);
+            let pjy = f64x4::from(&pos_y[j..j + 4]);
+            let pjz = f64x4::from(&pos_z[j..j + 4]);
+
+            let dx = pjx - pix;
+            let dy = pjy - piy;
+            let dz = pjz - piz;
+
+            let d2 = dx * dx + dy * dy + dz * dz;
+            let mask = d2.cmp_lt(cutoff_sq_v);
+            
+            // Check if any bit is set
+            if mask.any() {
+                let m_array: [u64; 4] = bytemuck::cast(mask);
+                for k in 0..4 {
+                    if m_array[k] != 0 {
+                        edge_i.push(i as i64);
+                        edge_j.push((j + k) as i64);
+                        shifts.push(0);
+                        shifts.push(0);
+                        shifts.push(0);
+                    }
+                }
+            }
+            j += 4;
+        }
+
+        // Tail loop
+        for k in j..n {
+            let dx = pos_x[k] - pos_x[i];
+            let dy = pos_y[k] - pos_y[i];
+            let dz = pos_z[k] - pos_z[i];
+            if dx * dx + dy * dy + dz * dz < cutoff_sq {
+                edge_i.push(i as i64);
+                edge_j.push(k as i64);
+                shifts.push(0);
+                shifts.push(0);
+                shifts.push(0);
+            }
+        }
+    }
+
+    (edge_i, edge_j, shifts)
+}
+
 pub fn brute_force_search(
     cell: &Cell,
     positions: &[Vector3<f64>],
@@ -1002,6 +1086,12 @@ pub fn brute_force_search_full(
     positions: &[Vector3<f64>],
     cutoff: f64,
 ) -> EdgeResult {
+    // Optimization: Use SIMD kernel for fully isolated systems
+    let pbc = cell.pbc();
+    if !pbc.x && !pbc.y && !pbc.z {
+        return brute_force_search_simd(positions, cutoff);
+    }
+
     let n = positions.len();
     let cutoff_sq = cutoff * cutoff;
     // Estimate capacity: avg 50 neighbors? for small system maybe less.
@@ -1087,6 +1177,47 @@ pub fn brute_force_search_multi(
 mod tests {
     use super::*;
     use nalgebra::Matrix3;
+
+    #[test]
+    fn test_brute_force_simd_vs_serial() {
+        let mut positions = Vec::new();
+        let n = 100;
+        let mut rng = 42u64;
+        let mut next_rand = || {
+            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            (rng as f64) / (u64::MAX as f64)
+        };
+
+        for _ in 0..n {
+            positions.push(Vector3::new(next_rand() * 10.0, next_rand() * 10.0, next_rand() * 10.0));
+        }
+
+        let cutoff = 2.5;
+
+        // Serial result
+        let mut edge_i_serial = Vec::new();
+        let mut edge_j_serial = Vec::new();
+        let mut shifts_serial = Vec::new();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let dist_sq = (positions[i] - positions[j]).norm_squared();
+                if dist_sq < cutoff * cutoff {
+                    edge_i_serial.push(i as i64);
+                    edge_j_serial.push(j as i64);
+                    shifts_serial.push(0);
+                    shifts_serial.push(0);
+                    shifts_serial.push(0);
+                }
+            }
+        }
+
+        // SIMD result
+        let (ei_simd, ej_simd, s_simd) = brute_force_search_simd(&positions, cutoff);
+
+        assert_eq!(ei_simd, edge_i_serial);
+        assert_eq!(ej_simd, edge_j_serial);
+        assert_eq!(s_simd, shifts_serial);
+    }
 
     #[test]
     fn test_z_order_calculation() {

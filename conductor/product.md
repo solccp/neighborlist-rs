@@ -39,6 +39,7 @@ To build a high-performance, safe, and deterministic neighborlist construction l
 
 ## Non-Functional Requirements
 -   **Performance:** $O(N)$ scaling for large systems with optimizations for cache locality (Z-order sorting) and adaptive parallelization.
+    -   **Hardware-Adaptive:** Automated compile-time auto-tuning to select optimal strategies (SIMD Brute-Force vs Cell-List) based on target hardware capability.
 -   **Parallelism:** Multi-core CPU support (e.g., via Rayon) to maximize construction speed for large atomistic systems.
 -   **Determinism:** Configurable sorting policies for reproducible results.
 -   **Safety:** Robust handling of edge cases (sparse/dense systems) without panics.

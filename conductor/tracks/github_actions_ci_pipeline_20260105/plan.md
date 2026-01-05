@@ -1,0 +1,28 @@
+# Plan: GitHub Actions CI Pipeline
+
+## Phase 1: Linting & Static Analysis
+- [x] Task: Initialize GitHub Actions directory and basic workflow structure in `.github/workflows/ci.yml`. [0a0cdcc]
+- [ ] Task: Implement Rust linting jobs (`rustfmt`, `clippy`).
+- [ ] Task: Implement Python linting jobs (`ruff check`, `ruff format`).
+- [ ] Task: Verify linting jobs fail on intentional errors and pass on clean code.
+- [ ] Task: Conductor - User Manual Verification 'Linting & Static Analysis' (Protocol in workflow.md)
+
+## Phase 2: Linux Matrix Build & Test
+- [ ] Task: Configure `maturin-action` for Linux (amd64).
+- [ ] Task: Implement Python version matrix (3.11, 3.12, 3.13) for Linux.
+- [ ] Task: Integrate `cargo test` and `pytest tests/` into the Linux job.
+- [ ] Task: Verify tests run and report results correctly in the GitHub UI.
+- [ ] Task: Conductor - User Manual Verification 'Linux Matrix Build & Test' (Protocol in workflow.md)
+
+## Phase 3: Cross-Platform Expansion
+- [ ] Task: Add macOS (arm64) support to the matrix.
+- [ ] Task: Add Windows (amd64) support to the matrix.
+- [ ] Task: Add Ubuntu (arm64) support (using `maturin-action`'s cross-compilation or specialized runners).
+- [ ] Task: Verify successful builds across the entire OS/Python matrix.
+- [ ] Task: Conductor - User Manual Verification 'Cross-Platform Expansion' (Protocol in workflow.md)
+
+## Phase 4: Benchmarks & Caching
+- [ ] Task: Implement caching for `~/.cargo/registry` and `~/.cache/pip`.
+- [ ] Task: Add a dedicated job to run `benchmarks/small_systems.py`.
+- [ ] Task: Verify that CI execution time is optimized and benchmarks are recorded.
+- [ ] Task: Conductor - User Manual Verification 'Benchmarks & Caching' (Protocol in workflow.md)

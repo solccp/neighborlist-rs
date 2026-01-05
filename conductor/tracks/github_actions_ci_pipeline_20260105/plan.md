@@ -14,7 +14,7 @@
 - [x] Task: Verify tests run and report results correctly in the GitHub UI. [8999686]
 - [ ] Task: Conductor - User Manual Verification 'Linux Matrix Build & Test' (Protocol in workflow.md)
 
-## Phase 3: Cross-Platform Expansion
+## Phase 3: Cross-Platform Expansion [checkpoint: da87ffd]
 - [x] Task: Add macOS (arm64) support to the matrix. [4c7a3df]
 - [x] Task: Add Windows (amd64) support to the matrix. [4c7a3df]
 - [x] Task: Add Ubuntu (arm64) support (using `maturin-action`'s cross-compilation or specialized runners). [4c7a3df]

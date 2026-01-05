@@ -25,7 +25,7 @@ $$H = [\mathbf{a} | \mathbf{b} | \mathbf{c}] = \begin{bmatrix} a_x & b_x & c_x \
 
 ### Result Schema
 All neighbor list results return a dictionary containing:
-- `edge_index`: `(2, M)` uint64 array of atom pairs.
+- `edge_index`: `(2, M)` int64 array of atom pairs.
 - `shift`: `(M, 3)` int32 array of periodic shifts.
 
 ### Reconstructing Vectors

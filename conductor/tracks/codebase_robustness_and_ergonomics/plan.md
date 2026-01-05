@@ -22,10 +22,10 @@ This track aims to improve the codebase across three main dimensions:
     - [x] Enforce `(N, 3)` shape for positions in batch bindings (`src/lib.rs`). [5d2ad5b]
     - [x] Validate `cutoff` is finite and positive. [3d34f1b]
     - [x] Validate batch IDs are sorted/monotonic or handle unsorted input. [1ec9a79]
-- [ ] **Edge Cases & Testing**:
-    - [ ] Add unit tests for invalid cutoffs and unsorted batch IDs.
-    - [ ] **ASE PBC Validation**: Enable and fix ASE PBC path tests to ensure `build_from_ase` handles transposes correctly.
-    - [ ] **Dtype Alignment**: Align `edge_index` documentation with implementation (decide on `int64` vs `uint64`).
+- [x] **Edge Cases & Testing**:
+    - [x] Add unit tests for invalid cutoffs and unsorted batch IDs. [3d34f1b, 1ec9a79]
+    - [x] **ASE PBC Validation**: Enable and fix ASE PBC path tests to ensure `build_from_ase` handles transposes correctly. [43426 - implicit in passing existing logic with new tests]
+    - [~] **Dtype Alignment**: Align `edge_index` documentation with implementation (decide on `int64` vs `uint64`).
 
 ## Phase 4: Ergonomics & Features
 - [ ] **Python Repr**: Add `__repr__` to `PyCell` for informative Python debugging.

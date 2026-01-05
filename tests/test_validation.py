@@ -48,3 +48,8 @@ def test_unsorted_batch_validation():
     
     with pytest.raises(ValueError, match="Batch IDs must be monotonic \(non-decreasing\)"):
         neighborlist_rs.build_neighborlists_batch(positions, batch, None, cutoff)
+
+def test_edge_index_dtype():
+    positions = np.random.rand(10, 3)
+    res = neighborlist_rs.build_neighborlists(None, positions, 5.0)
+    assert res["edge_index"].dtype == np.int64

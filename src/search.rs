@@ -1423,6 +1423,39 @@ mod tests {
 
                 assert_eq!(result, expected_sorted);
             }
+
+            #[test]
+            fn test_brute_force_isolated_correctness(
+                cutoff in 1.0..5.0,
+                positions_data in prop::collection::vec(prop::collection::vec(-10.0..10.0, 3), 2..100)
+            ) {
+                let positions: Vec<Vector3<f64>> = positions_data.into_iter().map(|p| Vector3::new(p[0], p[1], p[2])).collect();
+                
+                // Create a cell large enough that no PBC image can ever be within cutoff
+                let h = Matrix3::identity() * 1000.0;
+                let cell = Cell::new(h, Vector3::new(false, false, false)).unwrap();
+
+                // Reference: simple O(N^2) without any Cell logic
+                let mut expected = Vec::new();
+                for i in 0..positions.len() {
+                    for j in (i+1)..positions.len() {
+                        let dist = (positions[i] - positions[j]).norm();
+                        if dist < cutoff {
+                            expected.push((i as i64, j as i64));
+                        }
+                    }
+                }
+                expected.sort();
+
+                let (ei, ej, shifts) = brute_force_search_full(&cell, &positions, cutoff);
+                let mut results: Vec<(i64, i64)> = ei.into_iter().zip(ej.into_iter()).collect();
+                results.sort();
+
+                assert_eq!(results, expected);
+                for s in shifts {
+                    assert_eq!(s, 0, "Shift must be zero for isolated system");
+                }
+            }
         }
     }
 }

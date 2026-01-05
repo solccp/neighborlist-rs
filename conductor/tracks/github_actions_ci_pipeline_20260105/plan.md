@@ -21,7 +21,7 @@
 - [x] Task: Verify successful builds across the entire OS/Python matrix. [4c7a3df]
 - [ ] Task: Conductor - User Manual Verification 'Cross-Platform Expansion' (Protocol in workflow.md)
 
-## Phase 4: Benchmarks & Caching
+## Phase 4: Benchmarks & Caching [checkpoint: e550380]
 - [x] Task: Implement caching for `~/.cargo/registry` and `~/.cache/pip`. [c645049]
 - [x] Task: Add a dedicated job to run `benchmarks/small_systems.py`. [c645049]
 - [x] Task: Verify that CI execution time is optimized and benchmarks are recorded. [c645049]

@@ -11,7 +11,7 @@ This track aims to improve the codebase across three main dimensions:
 - [x] **Fix Undefined Behavior in Parallel Kernels**: Refactor `src/search.rs` to avoid overlapping mutable slices. Use raw pointers or `Sync` safe wrappers.
 - [x] **Audit Safety Blocks**: Ensure all `unsafe` blocks are documented with `SAFETY` comments and follow Rust's safety guidelines.
 
-## Phase 2: Performance Optimizations
+## Phase 2: Performance Optimizations [checkpoint: 09bc62d]
 - [x] **Zero-Copy Positions**: Use `bytemuck` to cast NumPy position arrays directly to `&[Vector3<f64>]` or `&[[f64; 3]]` to eliminate the $O(N)$ copy in `src/lib.rs`. [5d2ad5b]
 - [x] **Remove Hot-Path Allocations**: Precompute offset tuples in `CellList` or use stack-bounded `ArrayVec` in `src/search.rs` to eliminate repeated `Vec` allocations during neighbor search. [5c5205d]
 - [x] **Inner-Loop SIMD**: Implement an explicit SIMD kernel for the distance-squared calculation using the `wide` crate. [Pre-existing]

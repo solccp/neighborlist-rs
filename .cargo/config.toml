@@ -2,5 +2,9 @@
 rustflags = ["-C", "target-cpu=native"]
 
 [target.aarch64-unknown-linux-gnu]
-# For cross-compilation, we use generic aarch64 features or specify a safe baseline.
-rustflags = ["-C", "target-cpu=generic"]
+
+# neoverse-n1 is a common baseline for modern arm64 (AWS Graviton2, etc.)
+
+# It supports Neon and other features that speed up SIMD significantly.
+
+rustflags = ["-C", "target-cpu=neoverse-n1"]

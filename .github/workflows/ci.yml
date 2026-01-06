@@ -97,6 +97,7 @@ jobs:
           key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
 
       - name: Install dependencies and Build
+        shell: bash
         run: |
           pip install maturin pytest numpy ase
           if [ "${{ matrix.arch }}" = "arm64" ]; then
@@ -107,11 +108,13 @@ jobs:
           fi
 
       - name: Rust Unit Tests
-        if: matrix.arch == 'x64'
+        if: runner.os == 'Linux' && matrix.arch == 'x64'
+        shell: bash
         run: cargo test --release
 
       - name: Python Integration Tests
         if: matrix.arch == 'x64'
+        shell: bash
         run: pytest tests/
 
   benchmark:

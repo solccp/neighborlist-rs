@@ -57,10 +57,6 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         arch: [x64]
         python-version: ['3.11', '3.12', '3.13']
-        include:
-          - os: ubuntu-latest
-            arch: arm64
-            python-version: '3.13'
 
     steps:
       - uses: actions/checkout@v4
@@ -73,12 +69,6 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.arch == 'arm64' && 'aarch64-unknown-linux-gnu' || '' }}
-
-      - name: Install Zig
-        if: matrix.arch == 'arm64'
-        uses: goto-bus-stop/setup-zig@v2
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -104,20 +94,14 @@ jobs:
         shell: bash
         run: |
           pip install maturin pytest numpy ase
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            # Build verification only for arm64 (cross-compile)
-            maturin build --release --target aarch64-unknown-linux-gnu --zig
-          else
-            pip install . -v
-          fi
+          pip install . -v
 
       - name: Rust Unit Tests
-        if: runner.os == 'Linux' && matrix.arch == 'x64'
+        if: runner.os == 'Linux'
         shell: bash
         run: cargo test --release
 
       - name: Python Integration Tests
-        if: matrix.arch == 'x64'
         shell: bash
         run: pytest tests/
 

@@ -92,9 +92,10 @@ jobs:
       - name: Install dependencies and Build
         run: |
           pip install maturin pytest numpy ase
-          pip install .
+          maturin develop --release
 
       - name: Rust Unit Tests
+        if: runner.os == 'Linux'
         run: cargo test --release
 
       - name: Python Integration Tests

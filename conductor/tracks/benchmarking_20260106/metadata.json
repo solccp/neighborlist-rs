@@ -1,0 +1,8 @@
+{
+  "track_id": "benchmarking_20260106",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-01-06T12:00:00Z",
+  "updated_at": "2026-01-06T12:00:00Z",
+  "description": "Comprehensive neighbor list benchmarking suite comparing neighborlist-rs with torch-nl, torch_cluster, matscipy, ase, freud, and vesin on CPU and GPU (where applicable)."
+}

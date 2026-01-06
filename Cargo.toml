@@ -11,7 +11,7 @@ name = "neighborlist_rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pyo3 = { version = "0.27.2", features = ["extension-module"] }
+pyo3 = { version = "0.27.2" }
 numpy = "0.27.0"
 rayon = "1.10.0"
 nalgebra = { version = "0.33.0", features = ["bytemuck"] }
@@ -23,6 +23,8 @@ bytemuck = { version = "1.16.1", features = ["derive"] }
 dhat = { version = "0.3", optional = true }
 
 [features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
 dhat-heap = ["dep:dhat"]
 
 [dev-dependencies]

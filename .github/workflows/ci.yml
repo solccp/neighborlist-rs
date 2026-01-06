@@ -99,7 +99,9 @@ jobs:
       - name: Rust Unit Tests
         if: runner.os == 'Linux'
         shell: bash
-        run: cargo test --release
+        run: |
+          export LD_LIBRARY_PATH=$(python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"):$LD_LIBRARY_PATH
+          cargo test --release --no-default-features
 
       - name: Python Integration Tests
         shell: bash

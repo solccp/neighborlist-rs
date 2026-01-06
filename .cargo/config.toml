@@ -1,2 +1,6 @@
-[build]
+[target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "target-cpu=native"]
+
+[target.aarch64-unknown-linux-gnu]
+# For cross-compilation, we use generic aarch64 features or specify a safe baseline.
+rustflags = ["-C", "target-cpu=generic"]

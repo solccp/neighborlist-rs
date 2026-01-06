@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 
 pub mod batch;
 pub mod cell;
+pub mod config;
 pub mod search;
 pub mod single;
 
@@ -566,6 +567,36 @@ fn set_num_threads(n: usize) -> PyResult<()> {
 }
 
 #[pyfunction]
+fn get_brute_force_threshold() -> usize {
+    config::get_brute_force_threshold()
+}
+
+#[pyfunction]
+fn set_brute_force_threshold(val: usize) {
+    config::set_brute_force_threshold(val);
+}
+
+#[pyfunction]
+fn get_parallel_threshold() -> usize {
+    config::get_parallel_threshold()
+}
+
+#[pyfunction]
+fn set_parallel_threshold(val: usize) {
+    config::set_parallel_threshold(val);
+}
+
+#[pyfunction]
+fn get_stack_threshold() -> usize {
+    config::get_stack_threshold()
+}
+
+#[pyfunction]
+fn set_stack_threshold(val: usize) {
+    config::set_stack_threshold(val);
+}
+
+#[pyfunction]
 fn init_logging(level: Option<String>) {
     let filter = if let Some(l) = level {
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(l))
@@ -591,5 +622,11 @@ fn neighborlist_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(set_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(init_logging, m)?)?;
+    m.add_function(wrap_pyfunction!(get_brute_force_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(set_brute_force_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(get_parallel_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(set_parallel_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(get_stack_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(set_stack_threshold, m)?)?;
     Ok(())
 }

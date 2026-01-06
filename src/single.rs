@@ -1,8 +1,7 @@
 use crate::cell::Cell;
+use crate::config;
 use crate::search::{self, CellList, EdgeResult};
 use nalgebra::{Matrix3, Vector3};
-
-include!(concat!(env!("OUT_DIR"), "/tuned_constants.rs"));
 
 pub const AUTO_BOX_MARGIN: f64 = 1.0;
 
@@ -62,7 +61,7 @@ pub fn search_single(
     let min_width = perp.x.min(perp.y).min(perp.z);
     let mic_safe = cutoff * 2.0 < min_width;
 
-    if n_atoms < BRUTE_FORCE_THRESHOLD && mic_safe {
+    if n_atoms < config::get_brute_force_threshold() && mic_safe {
         Ok(search::brute_force_search_full(
             &cell_inner,
             positions,
@@ -70,7 +69,7 @@ pub fn search_single(
         ))
     } else {
         let cl = CellList::build(&cell_inner, positions, cutoff);
-        if parallel && n_atoms >= PARALLEL_THRESHOLD {
+        if parallel && n_atoms >= config::get_parallel_threshold() {
             Ok(cl.par_search_optimized(&cell_inner, cutoff))
         } else {
             let neighbors = cl.search(&cell_inner, positions, cutoff);
@@ -151,7 +150,7 @@ pub fn search_single_multi(
     let min_width = perp.x.min(perp.y).min(perp.z);
     let mic_safe = max_cutoff * 2.0 < min_width;
 
-    if n_atoms < BRUTE_FORCE_THRESHOLD && mic_safe {
+    if n_atoms < config::get_brute_force_threshold() && mic_safe {
         Ok(search::brute_force_search_multi(
             &cell_inner,
             positions,
@@ -169,10 +168,10 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::assertions_on_constants)]
     fn test_stack_threshold_logic() {
-        // This test ensures the auto-tuning produced one of our expected profiles
-        assert!(STACK_THRESHOLD == 1000 || STACK_THRESHOLD == 800 || STACK_THRESHOLD == 400);
+        let threshold = config::get_stack_threshold();
+        // This test ensures the default is one of our expected profiles
+        assert!(threshold == 1000 || threshold == 800 || threshold == 400);
     }
 
     #[test]

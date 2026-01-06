@@ -1,11 +1,10 @@
 use crate::cell::Cell;
+use crate::config;
 use crate::search::{self, CellList, EdgeResult};
 use nalgebra::{Matrix3, Vector3};
 use rayon::prelude::*;
 
 // Constants shared with lib.rs (or defined here and used there)
-include!(concat!(env!("OUT_DIR"), "/tuned_constants.rs"));
-
 pub const AUTO_BOX_MARGIN: f64 = 1.0;
 
 pub fn search_batch(
@@ -102,11 +101,11 @@ pub fn search_batch(
             let min_width = perp.x.min(perp.y).min(perp.z);
             let mic_safe = cutoff * 2.0 < min_width;
 
-            let (ei, ej, s) = if n_atoms_local < BRUTE_FORCE_THRESHOLD && mic_safe {
+            let (ei, ej, s) = if n_atoms_local < config::get_brute_force_threshold() && mic_safe {
                 search::brute_force_search_full(&cell_inner, pos_slice, cutoff)
             } else {
                 let cl = CellList::build(&cell_inner, pos_slice, cutoff);
-                if parallel && n_atoms_local >= PARALLEL_THRESHOLD {
+                if parallel && n_atoms_local >= config::get_parallel_threshold() {
                     cl.par_search_optimized(&cell_inner, cutoff)
                 } else {
                     let neighbors = cl.search(&cell_inner, pos_slice, cutoff);
@@ -242,7 +241,7 @@ pub fn search_batch_multi(
             let min_width = perp.x.min(perp.y).min(perp.z);
             let mic_safe = max_cutoff * 2.0 < min_width;
 
-            let system_results = if n_atoms_local < BRUTE_FORCE_THRESHOLD && mic_safe {
+            let system_results = if n_atoms_local < config::get_brute_force_threshold() && mic_safe {
                 search::brute_force_search_multi(&cell_inner, pos_slice, cutoffs, disjoint)
             } else {
                 let cl = CellList::build(&cell_inner, pos_slice, max_cutoff);

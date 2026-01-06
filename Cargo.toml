@@ -14,11 +14,11 @@ crate-type = ["cdylib", "rlib"]
 pyo3 = { version = "0.27.2" }
 numpy = "0.27.0"
 rayon = "1.10.0"
-nalgebra = { version = "0.33.0", features = ["bytemuck"] }
-thiserror = "1.0.61"
+nalgebra = { version = "0.34.1", features = ["bytemuck"] }
+thiserror = "2.0.17"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-wide = "0.7.26"
+wide = "1.1.1"
 bytemuck = { version = "1.16.1", features = ["derive"] }
 dhat = { version = "0.3", optional = true }
 

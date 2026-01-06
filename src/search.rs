@@ -500,7 +500,7 @@ impl CellList {
                         let dz = (pjz_v - piz_v) + oz_v;
                         let dist_sq = dx * dx + dy * dy + dz * dz;
 
-                        let mask = dist_sq.cmp_lt(cutoff_sq_v);
+                        let mask = dist_sq.simd_lt(cutoff_sq_v);
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         for k in 0..4 {
                             if m_array[k] != 0 && (i_orig < j_orig_v[k]) {
@@ -621,7 +621,7 @@ impl CellList {
                         let dz = (pjz_v - piz_v) + oz_v;
                         let dist_sq = dx * dx + dy * dy + dz * dz;
 
-                        let mask = dist_sq.cmp_lt(cutoff_sq_v);
+                        let mask = dist_sq.simd_lt(cutoff_sq_v);
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         for k in 0..4 {
                             if m_array[k] != 0 && (i_orig < j_orig_v[k]) {
@@ -746,7 +746,7 @@ impl CellList {
                         let dz = (pjz_v - piz_v) + oz_v;
                         let dist_sq_v = dx * dx + dy * dy + dz * dz;
 
-                        let mask = dist_sq_v.cmp_lt(max_cutoff_sq_v);
+                        let mask = dist_sq_v.simd_lt(max_cutoff_sq_v);
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         let dist_sq_array: [f64; 4] = dist_sq_v.into();
 
@@ -888,7 +888,7 @@ impl CellList {
                         let dz = (pjz_v - piz_v) + oz_v;
                         let dist_sq_v = dx * dx + dy * dy + dz * dz;
 
-                        let mask = dist_sq_v.cmp_lt(max_cutoff_sq_v);
+                        let mask = dist_sq_v.simd_lt(max_cutoff_sq_v);
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         let dist_sq_array: [f64; 4] = dist_sq_v.into();
 
@@ -1126,7 +1126,7 @@ pub fn brute_force_search_simd(positions: &[Vector3<f64>], cutoff: f64) -> EdgeR
             let dz = pjz - piz;
 
             let d2 = dx * dx + dy * dy + dz * dz;
-            let mask = d2.cmp_lt(cutoff_sq_v);
+            let mask = d2.simd_lt(cutoff_sq_v);
 
             if mask.any() {
                 let m_array: [u64; 4] = bytemuck::cast(mask);

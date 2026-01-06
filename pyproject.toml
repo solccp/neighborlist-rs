@@ -4,10 +4,32 @@ build-backend = "maturin"
 
 [project]
 name = "neighborlist_rs"
-version = "0.1.2"
-requires-python = ">=3.8"
+version = "0.1.4"
+description = "High-performance neighborlist construction for atomistic systems in Rust with Python bindings."
+readme = "README.md"
+authors = [
+    { name = "Chien-Pin Chou" }
+]
+license = { text = "MIT OR Apache-2.0" }
+keywords = ["molecular-dynamics", "neighbor-list", "atomistic", "rust", "python", "gnn", "machine-learning"]
+requires-python = ">=3.11"
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Chemistry",
     "Programming Language :: Rust",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
 ]
+
+[project.urls]
+Homepage = "https://github.com/solccp/neighborlist-rs"
+Repository = "https://github.com/solccp/neighborlist-rs"
+Issues = "https://github.com/solccp/neighborlist-rs/issues"
+

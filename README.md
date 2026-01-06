@@ -30,7 +30,7 @@ pip install .
 
 ## Usage (Python)
 
-Refer to [PYTHON_API.md](./PYTHON_API.md) for full documentation and advanced usage examples.
+Refer to [PYTHON_API.md](https://github.com/solccp/neighborlist-rs/blob/main/PYTHON_API.md) for full documentation and advanced usage examples.
 
 ### Quick Start (with ASE)
 ```python
@@ -63,7 +63,7 @@ result = neighborlist_rs.build_neighborlists(None, positions, cutoff=5.0)
 (Measured on CPU: ARM64 8-core / NVIDIA GB10 proxy. Results in wall-clock time ms.)
 
 #### 1. Single System Scaling
-![Single System Benchmark](docs/assets/benchmark_single_scaling.png)
+![Single System Benchmark](https://raw.githubusercontent.com/solccp/neighborlist-rs/main/docs/assets/benchmark_single_scaling.png)
 
 The table below shows the average wall-clock time (in milliseconds) to construct the neighbor list. **Lower is better.**
 
@@ -183,7 +183,7 @@ Benchmark for generating two neighbor lists simultaneously (e.g., GNN + Dispersi
 | ASE | Filtered (14.0 -> 6.0) | 11680 |
 
 #### 3. Batch Throughput (GNN Workloads)
-![Batch Throughput Benchmark](docs/assets/benchmark_batch_throughput.png)
+![Batch Throughput Benchmark](https://raw.githubusercontent.com/solccp/neighborlist-rs/main/docs/assets/benchmark_batch_throughput.png)
 
 Throughput in **systems per second** for batches of isolated 100-atom molecules.
 

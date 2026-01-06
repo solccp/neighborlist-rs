@@ -78,13 +78,6 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-test-${{ matrix.python-version }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build and Test (Maturin)
-        uses: PyO3/maturin-action@v1
-        with:
-          command: test
-          args: --release
-          sccache: 'true'
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -96,12 +89,15 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
 
-      - name: Install dependencies
+      - name: Install dependencies and Build
         run: |
-          pip install pytest numpy ase maturin
+          pip install maturin pytest numpy ase
           maturin develop --release
 
-      - name: Run pytest
+      - name: Rust Unit Tests
+        run: cargo test --release
+
+      - name: Python Integration Tests
         run: pytest tests/
 
   benchmark:
@@ -141,7 +137,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install maturin pytest numpy ase vesin
-          pip install .
+          maturin develop --release
 
       - name: Run benchmarks
         run: python benchmarks/small_systems.py

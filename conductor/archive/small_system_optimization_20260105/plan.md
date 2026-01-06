@@ -15,10 +15,10 @@
 - [x] Task: Implement a stack-allocated position buffer (using `ArrayVec` or a local array with a safety threshold of $N=512$) in `search_single`. [1573576]
 - [x] Task: Add a safety fallback to heap allocation for systems exceeding the stack threshold. [1573576]
 - [x] Task: Benchmark the crossover point and update `BRUTE_FORCE_THRESHOLD` based on new performance data. [1573576]
-- [x] Task: Implement `build.rs` for compile-time auto-tuning of thresholds (Brute Force, Parallel, and Stack). [1573576]
+- [x] Task: Implement dynamic configuration system (`src/config.rs`) to replace compile-time auto-tuning. [dad953f]
 - [x] Task: Conductor - User Manual Verification 'Memory & Threshold Optimization' (Protocol in workflow.md) [1573576]
 
 ## Phase 4: Final Verification [checkpoint: 222aa9e]
-- [x] Task: Run `benchmarks/comprehensive_benchmark.py` and verify `neighborlist-rs` < `vesin` for the 100 and 1000 atom cases. [222aa9e]
+- [x] Task: Run `benchmarks/comprehensive_benchmark.py` and verify `neighborlist-rs` < `vesin` for the 100 and 1000 atom cases. [dad953f]
 - [x] Task: Audit `src/lib.rs` for any remaining redundant allocations in the non-PBC path. [222aa9e]
 - [x] Task: Conductor - User Manual Verification 'Final Verification' (Protocol in workflow.md) [222aa9e]

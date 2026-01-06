@@ -98,8 +98,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest numpy ase
-          pip install .
+          pip install pytest numpy ase maturin
+          maturin develop --release
 
       - name: Run pytest
         run: pytest tests/

@@ -18,7 +18,7 @@
 - [x] Task: Implement dynamic configuration system (`src/config.rs`) to replace compile-time auto-tuning. [dad953f]
 - [x] Task: Conductor - User Manual Verification 'Memory & Threshold Optimization' (Protocol in workflow.md) [1573576]
 
-## Phase 4: Final Verification [checkpoint: 222aa9e]
-- [x] Task: Run `benchmarks/comprehensive_benchmark.py` and verify `neighborlist-rs` < `vesin` for the 100 and 1000 atom cases. [dad953f]
-- [x] Task: Audit `src/lib.rs` for any remaining redundant allocations in the non-PBC path. [222aa9e]
-- [x] Task: Conductor - User Manual Verification 'Final Verification' (Protocol in workflow.md) [222aa9e]
+## Phase 4: Final Verification [checkpoint: 89b423d]
+- [x] Task: Run `benchmarks/comprehensive_benchmark.py` and verify `neighborlist-rs` < `vesin` for the 100 and 1000 atom cases. [89b423d]
+- [x] Task: Audit `src/lib.rs` for any remaining redundant allocations in the non-PBC path. [89b423d]
+- [x] Task: Conductor - User Manual Verification 'Final Verification' (Protocol in workflow.md) [89b423d]

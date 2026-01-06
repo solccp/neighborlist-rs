@@ -137,7 +137,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install maturin pytest numpy ase vesin
-          maturin develop --release
+          pip install .
 
       - name: Run benchmarks
         run: python benchmarks/small_systems.py

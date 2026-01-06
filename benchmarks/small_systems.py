@@ -30,6 +30,7 @@ def benchmark_neighborlist_rs_worker(pos, cutoff, n_threads):
         f"""
 import os
 os.environ["RAYON_NUM_THREADS"] = "{n_threads}"
+import neighborlist_rs
 import numpy as np
 import time
 

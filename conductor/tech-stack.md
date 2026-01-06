@@ -23,7 +23,6 @@
 
 ## Development Tools
 -   **clippy:** For linting and ensuring idiomatic Rust code.
--   **Auto-Tuning Build Script:** Custom `build.rs` logic for hardware-specific performance calibration.
 - **rustfmt:** For consistent code formatting.
 - **tracing:** For instrumentation and performance monitoring.
 - **dhat/perf:** For memory and CPU profiling during optimization cycles.

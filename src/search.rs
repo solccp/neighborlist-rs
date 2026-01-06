@@ -1,4 +1,5 @@
 use crate::cell::Cell;
+use crate::config;
 use nalgebra::Vector3;
 use rayon::prelude::*;
 use tracing::info_span;

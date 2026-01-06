@@ -3,7 +3,9 @@ import numpy as np
 import numpy.typing as npt
 
 class PyCell:
-    def __init__(self, h: List[List[float]], pbc: Optional[List[bool]] = None) -> None: ...
+    def __init__(
+        self, h: List[List[float]], pbc: Optional[List[bool]] = None
+    ) -> None: ...
     def wrap(self, pos: List[float]) -> List[float]: ...
     @staticmethod
     def from_ase(atoms: any) -> "PyCell": ...
@@ -12,50 +14,40 @@ def build_neighborlists(
     cell: Optional[PyCell],
     positions: npt.NDArray[np.float64],
     cutoff: float,
-    parallel: bool = True
+    parallel: bool = True,
 ) -> Dict[str, npt.NDArray]: ...
-
-def build_from_ase(
-    atoms: any,
-    cutoff: float
-) -> Dict[str, npt.NDArray]: ...
-
+def build_from_ase(atoms: any, cutoff: float) -> Dict[str, npt.NDArray]: ...
 def build_neighborlists_multi(
     cell: Optional[PyCell],
     positions: npt.NDArray[np.float64],
     cutoffs: List[float],
     labels: Optional[List[str]] = None,
-    disjoint: bool = False
+    disjoint: bool = False,
 ) -> Dict[Union[int, str], Dict[str, npt.NDArray]]: ...
-
 def build_multi_from_ase(
     atoms: any,
     cutoffs: List[float],
     labels: Optional[List[str]] = None,
-    disjoint: bool = False
+    disjoint: bool = False,
 ) -> Dict[Union[int, str], Dict[str, npt.NDArray]]: ...
-
 def build_neighborlists_batch(
     positions: npt.NDArray[np.float64],
     batch: npt.NDArray[np.int32],
     cells: Optional[npt.NDArray[np.float64]] = None,
     cutoff: float = 5.0,
-    parallel: bool = True
+    parallel: bool = True,
 ) -> Dict[str, npt.NDArray]: ...
-
 def build_neighborlists_batch_multi(
     positions: npt.NDArray[np.float64],
     batch: npt.NDArray[np.int32],
     cells: Optional[npt.NDArray[np.float64]] = None,
     cutoffs: List[float] = [5.0],
     labels: Optional[List[str]] = None,
-    disjoint: bool = False
+    disjoint: bool = False,
 ) -> Dict[Union[int, str], Dict[str, npt.NDArray]]: ...
-
 def set_num_threads(n: int) -> None: ...
 def get_num_threads() -> int: ...
 def init_logging(level: Optional[str] = None) -> None: ...
-
 def get_brute_force_threshold() -> int: ...
 def set_brute_force_threshold(val: int) -> None: ...
 def get_parallel_threshold() -> int: ...

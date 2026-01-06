@@ -1,47 +1,64 @@
+from typing import List, Dict, Optional, Union
 import numpy as np
-from typing import List, Optional, Dict, Union, Any
+import numpy.typing as npt
 
 class PyCell:
-    def __init__(
-        self, h: List[List[float]], pbc: Optional[List[bool]] = None
-    ) -> None: ...
+    def __init__(self, h: List[List[float]], pbc: Optional[List[bool]] = None) -> None: ...
     def wrap(self, pos: List[float]) -> List[float]: ...
-    def __repr__(self) -> str: ...
     @staticmethod
-    def from_ase(atoms: Any) -> "PyCell": ...
+    def from_ase(atoms: any) -> "PyCell": ...
 
 def build_neighborlists(
-    cell: Optional[PyCell], positions: np.ndarray, cutoff: float, parallel: bool = True
-) -> Dict[str, np.ndarray]: ...
-def build_from_ase(atoms: Any, cutoff: float) -> Dict[str, np.ndarray]: ...
-def build_multi_from_ase(
-    atoms: Any,
-    cutoffs: List[float],
-    labels: Optional[List[str]] = None,
-    disjoint: bool = False,
-) -> Dict[Union[int, str], Dict[str, np.ndarray]]: ...
+    cell: Optional[PyCell],
+    positions: npt.NDArray[np.float64],
+    cutoff: float,
+    parallel: bool = True
+) -> Dict[str, npt.NDArray]: ...
+
+def build_from_ase(
+    atoms: any,
+    cutoff: float
+) -> Dict[str, npt.NDArray]: ...
+
 def build_neighborlists_multi(
     cell: Optional[PyCell],
-    positions: np.ndarray,
+    positions: npt.NDArray[np.float64],
     cutoffs: List[float],
     labels: Optional[List[str]] = None,
-    disjoint: bool = False,
-) -> Dict[Union[int, str], Dict[str, np.ndarray]]: ...
+    disjoint: bool = False
+) -> Dict[Union[int, str], Dict[str, npt.NDArray]]: ...
+
+def build_multi_from_ase(
+    atoms: any,
+    cutoffs: List[float],
+    labels: Optional[List[str]] = None,
+    disjoint: bool = False
+) -> Dict[Union[int, str], Dict[str, npt.NDArray]]: ...
+
 def build_neighborlists_batch(
-    positions: np.ndarray,
-    batch: np.ndarray,
-    cells: Optional[np.ndarray] = None,
+    positions: npt.NDArray[np.float64],
+    batch: npt.NDArray[np.int32],
+    cells: Optional[npt.NDArray[np.float64]] = None,
     cutoff: float = 5.0,
-    parallel: bool = True,
-) -> Dict[str, np.ndarray]: ...
+    parallel: bool = True
+) -> Dict[str, npt.NDArray]: ...
+
 def build_neighborlists_batch_multi(
-    positions: np.ndarray,
-    batch: np.ndarray,
-    cells: Optional[np.ndarray] = None,
+    positions: npt.NDArray[np.float64],
+    batch: npt.NDArray[np.int32],
+    cells: Optional[npt.NDArray[np.float64]] = None,
     cutoffs: List[float] = [5.0],
     labels: Optional[List[str]] = None,
-    disjoint: bool = False,
-) -> Dict[Union[int, str], Dict[str, np.ndarray]]: ...
-def get_num_threads() -> int: ...
+    disjoint: bool = False
+) -> Dict[Union[int, str], Dict[str, npt.NDArray]]: ...
+
 def set_num_threads(n: int) -> None: ...
+def get_num_threads() -> int: ...
 def init_logging(level: Optional[str] = None) -> None: ...
+
+def get_brute_force_threshold() -> int: ...
+def set_brute_force_threshold(val: int) -> None: ...
+def get_parallel_threshold() -> int: ...
+def set_parallel_threshold(val: int) -> None: ...
+def get_stack_threshold() -> int: ...
+def set_stack_threshold(val: int) -> None: ...

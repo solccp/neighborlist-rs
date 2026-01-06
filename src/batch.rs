@@ -241,7 +241,8 @@ pub fn search_batch_multi(
             let min_width = perp.x.min(perp.y).min(perp.z);
             let mic_safe = max_cutoff * 2.0 < min_width;
 
-            let system_results = if n_atoms_local < config::get_brute_force_threshold() && mic_safe {
+            let system_results = if n_atoms_local < config::get_brute_force_threshold() && mic_safe
+            {
                 search::brute_force_search_multi(&cell_inner, pos_slice, cutoffs, disjoint)
             } else {
                 let cl = CellList::build(&cell_inner, pos_slice, max_cutoff);

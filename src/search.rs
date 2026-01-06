@@ -1052,120 +1052,120 @@ fn interleave_3(mut x: u64) -> u64 {
     x = (x | x << 4) & 0x10c30c30c30c30c3u64;
     x = (x | x << 2) & 0x1249249249249249u64;
     x
-    }
+}
 
-    pub fn brute_force_search_simd(positions: &[Vector3<f64>], cutoff: f64) -> EdgeResult {
-        let n = positions.len();
+pub fn brute_force_search_simd(positions: &[Vector3<f64>], cutoff: f64) -> EdgeResult {
+    let n = positions.len();
 
-        let cutoff_sq = cutoff * cutoff;
-        let cutoff_sq_v = f64x4::from(cutoff_sq);
+    let cutoff_sq = cutoff * cutoff;
+    let cutoff_sq_v = f64x4::from(cutoff_sq);
 
-        // Estimate capacity: avg 50 neighbors? for small system maybe less.
-        let capacity = n * BRUTE_FORCE_CAPACITY_FACTOR;
-        let mut edge_i = Vec::with_capacity(capacity);
-        let mut edge_j = Vec::with_capacity(capacity);
-        let mut shifts = Vec::with_capacity(capacity * 3);
+    // Estimate capacity: avg 50 neighbors? for small system maybe less.
+    let capacity = n * BRUTE_FORCE_CAPACITY_FACTOR;
+    let mut edge_i = Vec::with_capacity(capacity);
+    let mut edge_j = Vec::with_capacity(capacity);
+    let mut shifts = Vec::with_capacity(capacity * 3);
 
-        // Stack-allocated scratchpad for SoA conversion
-        let (pos_x, pos_y, pos_z) = if n <= config::get_stack_threshold() {
-            let mut x = [0.0; config::MAX_STACK_SIZE];
-            let mut y = [0.0; config::MAX_STACK_SIZE];
-            let mut z = [0.0; config::MAX_STACK_SIZE];
-            for (i, p) in positions.iter().enumerate() {
-                x[i] = p.x;
-                y[i] = p.y;
-                z[i] = p.z;
-            }
-            (
-                PositionSoA::Stack(x),
-                PositionSoA::Stack(y),
-                PositionSoA::Stack(z),
-            )
-        } else {
-            let mut x = Vec::with_capacity(n);
-            let mut y = Vec::with_capacity(n);
-            let mut z = Vec::with_capacity(n);
-            for p in positions {
-                x.push(p.x);
-                y.push(p.y);
-                z.push(p.z);
-            }
-            (
-                PositionSoA::Heap(x),
-                PositionSoA::Heap(y),
-                PositionSoA::Heap(z),
-            )
-        };
+    // Stack-allocated scratchpad for SoA conversion
+    let (pos_x, pos_y, pos_z) = if n <= config::get_stack_threshold() {
+        let mut x = [0.0; config::MAX_STACK_SIZE];
+        let mut y = [0.0; config::MAX_STACK_SIZE];
+        let mut z = [0.0; config::MAX_STACK_SIZE];
+        for (i, p) in positions.iter().enumerate() {
+            x[i] = p.x;
+            y[i] = p.y;
+            z[i] = p.z;
+        }
+        (
+            PositionSoA::Stack(x),
+            PositionSoA::Stack(y),
+            PositionSoA::Stack(z),
+        )
+    } else {
+        let mut x = Vec::with_capacity(n);
+        let mut y = Vec::with_capacity(n);
+        let mut z = Vec::with_capacity(n);
+        for p in positions {
+            x.push(p.x);
+            y.push(p.y);
+            z.push(p.z);
+        }
+        (
+            PositionSoA::Heap(x),
+            PositionSoA::Heap(y),
+            PositionSoA::Heap(z),
+        )
+    };
 
-        let px = match &pos_x {
-            PositionSoA::Stack(s) => &s[..n],
-            PositionSoA::Heap(v) => &v[..n],
-        };
-        let py = match &pos_y {
-            PositionSoA::Stack(s) => &s[..n],
-            PositionSoA::Heap(v) => &v[..n],
-        };
-        let pz = match &pos_z {
-            PositionSoA::Stack(s) => &s[..n],
-            PositionSoA::Heap(v) => &v[..n],
-        };
+    let px = match &pos_x {
+        PositionSoA::Stack(s) => &s[..n],
+        PositionSoA::Heap(v) => &v[..n],
+    };
+    let py = match &pos_y {
+        PositionSoA::Stack(s) => &s[..n],
+        PositionSoA::Heap(v) => &v[..n],
+    };
+    let pz = match &pos_z {
+        PositionSoA::Stack(s) => &s[..n],
+        PositionSoA::Heap(v) => &v[..n],
+    };
 
-        for i in 0..n {
-            let pix = f64x4::from(px[i]);
-            let piy = f64x4::from(py[i]);
-            let piz = f64x4::from(pz[i]);
+    for i in 0..n {
+        let pix = f64x4::from(px[i]);
+        let piy = f64x4::from(py[i]);
+        let piz = f64x4::from(pz[i]);
 
-            let mut j = i + 1;
-            while j + 4 <= n {
-                let pjx = f64x4::from(<[f64; 4]>::try_from(&px[j..j + 4]).unwrap());
-                let pjy = f64x4::from(<[f64; 4]>::try_from(&py[j..j + 4]).unwrap());
-                let pjz = f64x4::from(<[f64; 4]>::try_from(&pz[j..j + 4]).unwrap());
+        let mut j = i + 1;
+        while j + 4 <= n {
+            let pjx = f64x4::from(<[f64; 4]>::try_from(&px[j..j + 4]).unwrap());
+            let pjy = f64x4::from(<[f64; 4]>::try_from(&py[j..j + 4]).unwrap());
+            let pjz = f64x4::from(<[f64; 4]>::try_from(&pz[j..j + 4]).unwrap());
 
-                let dx = pjx - pix;
-                let dy = pjy - piy;
-                let dz = pjz - piz;
+            let dx = pjx - pix;
+            let dy = pjy - piy;
+            let dz = pjz - piz;
 
-                let d2 = dx * dx + dy * dy + dz * dz;
-                let mask = d2.cmp_lt(cutoff_sq_v);
+            let d2 = dx * dx + dy * dy + dz * dz;
+            let mask = d2.cmp_lt(cutoff_sq_v);
 
-                if mask.any() {
-                    let m_array: [u64; 4] = bytemuck::cast(mask);
-                    for (k, &m) in m_array.iter().enumerate() {
-                        if m != 0 {
-                            edge_i.push(i as i64);
-                            edge_j.push((j + k) as i64);
-                            shifts.push(0);
-                            shifts.push(0);
-                            shifts.push(0);
-                        }
+            if mask.any() {
+                let m_array: [u64; 4] = bytemuck::cast(mask);
+                for (k, &m) in m_array.iter().enumerate() {
+                    if m != 0 {
+                        edge_i.push(i as i64);
+                        edge_j.push((j + k) as i64);
+                        shifts.push(0);
+                        shifts.push(0);
+                        shifts.push(0);
                     }
                 }
-                j += 4;
             }
-
-            // Tail loop
-            for k in j..n {
-                let dx = px[k] - px[i];
-                let dy = py[k] - py[i];
-                let dz = pz[k] - pz[i];
-                if dx * dx + dy * dy + dz * dz < cutoff_sq {
-                    edge_i.push(i as i64);
-                    edge_j.push(k as i64);
-                    shifts.push(0);
-                    shifts.push(0);
-                    shifts.push(0);
-                }
-            }
+            j += 4;
         }
 
-        (edge_i, edge_j, shifts)
+        // Tail loop
+        for k in j..n {
+            let dx = px[k] - px[i];
+            let dy = py[k] - py[i];
+            let dz = pz[k] - pz[i];
+            if dx * dx + dy * dy + dz * dz < cutoff_sq {
+                edge_i.push(i as i64);
+                edge_j.push(k as i64);
+                shifts.push(0);
+                shifts.push(0);
+                shifts.push(0);
+            }
+        }
     }
 
-    #[allow(clippy::large_enum_variant)]
-    enum PositionSoA {
-        Stack([f64; config::MAX_STACK_SIZE]),
-        Heap(Vec<f64>),
-    }
+    (edge_i, edge_j, shifts)
+}
+
+#[allow(clippy::large_enum_variant)]
+enum PositionSoA {
+    Stack([f64; config::MAX_STACK_SIZE]),
+    Heap(Vec<f64>),
+}
 pub fn brute_force_search(
     cell: &Cell,
     positions: &[Vector3<f64>],

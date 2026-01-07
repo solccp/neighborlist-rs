@@ -505,8 +505,7 @@ impl CellList {
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         for k in 0..4 {
                             if m_array[k] != 0
-                                && (i_orig < j_orig_v[k]
-                                    || (i_orig == j_orig_v[k] && is_shifted))
+                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && is_shifted))
                             {
                                 count += 1;
                             }
@@ -633,8 +632,7 @@ impl CellList {
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         for k in 0..4 {
                             if m_array[k] != 0
-                                && (i_orig < j_orig_v[k]
-                                    || (i_orig == j_orig_v[k] && is_shifted))
+                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && is_shifted))
                             {
                                 edge_i[offset] = i_orig as i64;
                                 edge_j[offset] = j_orig_v[k] as i64;
@@ -767,8 +765,7 @@ impl CellList {
 
                         for k in 0..4 {
                             if m_array[k] != 0
-                                && (i_orig < j_orig_v[k]
-                                    || (i_orig == j_orig_v[k] && is_shifted))
+                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && is_shifted))
                             {
                                 let d2 = dist_sq_array[k];
                                 for (cutoff_idx, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
@@ -916,8 +913,7 @@ impl CellList {
 
                         for k in 0..4 {
                             if m_array[k] != 0
-                                && (i_orig < j_orig_v[k]
-                                    || (i_orig == j_orig_v[k] && is_shifted))
+                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && is_shifted))
                             {
                                 let d2 = dist_sq_array[k];
                                 for (cutoff_idx, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {

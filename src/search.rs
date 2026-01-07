@@ -460,9 +460,9 @@ impl CellList {
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
 
-        for (nbx, ox, _sx) in sx_list.as_slice() {
-            for (nby, oy, _sy) in sy_list.as_slice() {
-                for (nbz, oz, _sz) in sz_list.as_slice() {
+        for (nbx, ox, sx) in sx_list.as_slice() {
+            for (nby, oy, sy) in sy_list.as_slice() {
+                for (nbz, oz, sz) in sz_list.as_slice() {
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -473,6 +473,7 @@ impl CellList {
                     }
 
                     let offset_vec = ox + oy + oz;
+                    let is_shifted = *sx != 0 || *sy != 0 || *sz != 0;
                     let ox_v = f64x4::from(offset_vec.x);
                     let oy_v = f64x4::from(offset_vec.y);
                     let oz_v = f64x4::from(offset_vec.z);
@@ -503,7 +504,10 @@ impl CellList {
                         let mask = dist_sq.simd_lt(cutoff_sq_v);
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         for k in 0..4 {
-                            if m_array[k] != 0 && (i_orig < j_orig_v[k]) {
+                            if m_array[k] != 0
+                                && (i_orig < j_orig_v[k]
+                                    || (i_orig == j_orig_v[k] && is_shifted))
+                            {
                                 count += 1;
                             }
                         }
@@ -512,7 +516,10 @@ impl CellList {
 
                     for sj_tail in sj..end_j {
                         let j_orig = self.particles[sj_tail];
-                        if i_orig >= j_orig {
+                        if i_orig > j_orig {
+                            continue;
+                        }
+                        if i_orig == j_orig && !is_shifted {
                             continue;
                         }
                         let dx = (self.pos_x[sj_tail] - pos_i_x) + offset_vec.x;
@@ -594,6 +601,7 @@ impl CellList {
                     }
 
                     let offset_vec = ox + oy + oz;
+                    let is_shifted = *sx != 0 || *sy != 0 || *sz != 0;
                     let ox_v = f64x4::from(offset_vec.x);
                     let oy_v = f64x4::from(offset_vec.y);
                     let oz_v = f64x4::from(offset_vec.z);
@@ -624,7 +632,10 @@ impl CellList {
                         let mask = dist_sq.simd_lt(cutoff_sq_v);
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         for k in 0..4 {
-                            if m_array[k] != 0 && (i_orig < j_orig_v[k]) {
+                            if m_array[k] != 0
+                                && (i_orig < j_orig_v[k]
+                                    || (i_orig == j_orig_v[k] && is_shifted))
+                            {
                                 edge_i[offset] = i_orig as i64;
                                 edge_j[offset] = j_orig_v[k] as i64;
                                 shifts[offset * 3] = self.atom_shifts_x[sj + k] - s_i_x + sx;
@@ -638,7 +649,10 @@ impl CellList {
 
                     for sj_tail in sj..end_j {
                         let j_orig = self.particles[sj_tail];
-                        if i_orig >= j_orig {
+                        if i_orig > j_orig {
+                            continue;
+                        }
+                        if i_orig == j_orig && !is_shifted {
                             continue;
                         }
                         let dx = (self.pos_x[sj_tail] - pos_i_x) + offset_vec.x;
@@ -706,9 +720,9 @@ impl CellList {
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
 
-        for (nbx, ox, _sx) in sx_list.as_slice() {
-            for (nby, oy, _sy) in sy_list.as_slice() {
-                for (nbz, oz, _sz) in sz_list.as_slice() {
+        for (nbx, ox, sx) in sx_list.as_slice() {
+            for (nby, oy, sy) in sy_list.as_slice() {
+                for (nbz, oz, sz) in sz_list.as_slice() {
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -719,6 +733,7 @@ impl CellList {
                     }
 
                     let offset_vec = ox + oy + oz;
+                    let is_shifted = *sx != 0 || *sy != 0 || *sz != 0;
                     let ox_v = f64x4::from(offset_vec.x);
                     let oy_v = f64x4::from(offset_vec.y);
                     let oz_v = f64x4::from(offset_vec.z);
@@ -751,7 +766,10 @@ impl CellList {
                         let dist_sq_array: [f64; 4] = dist_sq_v.into();
 
                         for k in 0..4 {
-                            if m_array[k] != 0 && (i_orig < j_orig_v[k]) {
+                            if m_array[k] != 0
+                                && (i_orig < j_orig_v[k]
+                                    || (i_orig == j_orig_v[k] && is_shifted))
+                            {
                                 let d2 = dist_sq_array[k];
                                 for (cutoff_idx, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
                                     if d2 < rc_sq {
@@ -768,7 +786,10 @@ impl CellList {
 
                     for sj_tail in sj..end_j {
                         let j_orig = self.particles[sj_tail];
-                        if i_orig >= j_orig {
+                        if i_orig > j_orig {
+                            continue;
+                        }
+                        if i_orig == j_orig && !is_shifted {
                             continue;
                         }
                         let dx = (self.pos_x[sj_tail] - pos_i_x) + offset_vec.x;
@@ -861,6 +882,7 @@ impl CellList {
                     }
 
                     let offset_vec = ox + oy + oz;
+                    let is_shifted = *sx != 0 || *sy != 0 || *sz != 0;
                     let ox_v = f64x4::from(offset_vec.x);
                     let oy_v = f64x4::from(offset_vec.y);
                     let oz_v = f64x4::from(offset_vec.z);
@@ -893,7 +915,10 @@ impl CellList {
                         let dist_sq_array: [f64; 4] = dist_sq_v.into();
 
                         for k in 0..4 {
-                            if m_array[k] != 0 && (i_orig < j_orig_v[k]) {
+                            if m_array[k] != 0
+                                && (i_orig < j_orig_v[k]
+                                    || (i_orig == j_orig_v[k] && is_shifted))
+                            {
                                 let d2 = dist_sq_array[k];
                                 for (cutoff_idx, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
                                     if d2 < rc_sq {
@@ -928,7 +953,10 @@ impl CellList {
 
                     for sj_tail in sj..end_j {
                         let j_orig = self.particles[sj_tail];
-                        if i_orig >= j_orig {
+                        if i_orig > j_orig {
+                            continue;
+                        }
+                        if i_orig == j_orig && !is_shifted {
                             continue;
                         }
                         let dx = (self.pos_x[sj_tail] - pos_i_x) + offset_vec.x;
@@ -1006,10 +1034,14 @@ impl CellList {
                     }
 
                     let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
+                    let is_shifted = sx != 0 || sy != 0 || sz != 0;
 
                     for sj in start_j..end_j {
                         let j_orig = self.particles[sj];
-                        if i_orig >= j_orig {
+                        if i_orig > j_orig {
+                            continue;
+                        }
+                        if i_orig == j_orig && !is_shifted {
                             continue;
                         }
                         let dx = (self.pos_x[sj] - pos_i_x) + offset_vec.x;

@@ -394,15 +394,16 @@ fn build_neighborlists_batch<'py>(
             if is_zero_matrix(&m) {
                 mats.push(None);
             } else {
+                // Transpose ASE (row-major) to internal (column-major)
                 let h_mat = Matrix3::new(
                     m[[0, 0]],
-                    m[[0, 1]],
-                    m[[0, 2]],
                     m[[1, 0]],
-                    m[[1, 1]],
-                    m[[1, 2]],
                     m[[2, 0]],
+                    m[[0, 1]],
+                    m[[1, 1]],
                     m[[2, 1]],
+                    m[[0, 2]],
+                    m[[1, 2]],
                     m[[2, 2]],
                 );
                 mats.push(Some((h_mat, Vector3::new(true, true, true))));
@@ -502,15 +503,16 @@ fn build_neighborlists_batch_multi<'py>(
             if is_zero_matrix(&m) {
                 mats.push(None);
             } else {
+                // Transpose ASE (row-major) to internal (column-major)
                 let h_mat = Matrix3::new(
                     m[[0, 0]],
-                    m[[0, 1]],
-                    m[[0, 2]],
                     m[[1, 0]],
-                    m[[1, 1]],
-                    m[[1, 2]],
                     m[[2, 0]],
+                    m[[0, 1]],
+                    m[[1, 1]],
                     m[[2, 1]],
+                    m[[0, 2]],
+                    m[[1, 2]],
                     m[[2, 2]],
                 );
                 mats.push(Some((h_mat, Vector3::new(true, true, true))));

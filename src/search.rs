@@ -82,6 +82,10 @@ pub struct CellList {
     atom_shifts_z: Vec<i32>,
     num_bins: Vector3<usize>,
     n_search: Vector3<i32>,
+    // Optimization for pruning
+    bin_basis: [Vector3<f64>; 3],
+    bin_origin: Vector3<f64>,
+    bin_bounding_radius: f64,
 }
 
 impl CellList {
@@ -222,6 +226,21 @@ impl CellList {
             }
         }
 
+        // 6. Precompute bin geometry for pruning
+        let vx = h_matrix * Vector3::new(1.0 / num_bins.x as f64, 0.0, 0.0);
+        let vy = h_matrix * Vector3::new(0.0, 1.0 / num_bins.y as f64, 0.0);
+        let vz = h_matrix * Vector3::new(0.0, 0.0, 1.0 / num_bins.z as f64);
+        let bin_origin =
+            h_matrix * Vector3::new(0.5 / num_bins.x as f64, 0.5 / num_bins.y as f64, 0.5 / num_bins.z as f64);
+        
+        // Compute max radius (half of max diagonal)
+        let d1 = (vx + vy + vz).norm_squared();
+        let d2 = (vx + vy - vz).norm_squared();
+        let d3 = (vx - vy + vz).norm_squared();
+        let d4 = (vx - vy - vz).norm_squared();
+        let max_diag_sq = d1.max(d2).max(d3).max(d4);
+        let bin_bounding_radius = 0.5 * max_diag_sq.sqrt();
+
         Self {
             particles: final_particles,
             cell_starts,
@@ -234,6 +253,9 @@ impl CellList {
             atom_shifts_z: final_atom_shifts_z,
             num_bins,
             n_search,
+            bin_basis: [vx, vy, vz],
+            bin_origin,
+            bin_bounding_radius,
         }
     }
 
@@ -459,10 +481,25 @@ impl CellList {
         );
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
+        let prune_limit = cutoff_sq.sqrt() + self.bin_bounding_radius;
+        let prune_limit_sq = prune_limit * prune_limit;
+        let pos_i = Vector3::new(pos_i_x, pos_i_y, pos_i_z);
 
         for (nbx, ox, sx) in sx_list.as_slice() {
+            let center_x = self.bin_origin + self.bin_basis[0] * (*nbx as f64);
             for (nby, oy, sy) in sy_list.as_slice() {
+                let center_xy = center_x + self.bin_basis[1] * (*nby as f64);
                 for (nbz, oz, sz) in sz_list.as_slice() {
+                    let target_center = center_xy + self.bin_basis[2] * (*nbz as f64);
+                    let offset_vec = ox + oy + oz;
+
+                    // Pruning check
+                    let center_shifted = target_center + offset_vec;
+                    let diff = center_shifted - pos_i;
+                    if diff.norm_squared() > prune_limit_sq {
+                        continue;
+                    }
+
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -586,10 +623,25 @@ impl CellList {
         );
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
+        let prune_limit = cutoff_sq.sqrt() + self.bin_bounding_radius;
+        let prune_limit_sq = prune_limit * prune_limit;
+        let pos_i = Vector3::new(pos_i_x, pos_i_y, pos_i_z);
 
         for (nbx, ox, sx) in sx_list.as_slice() {
+            let center_x = self.bin_origin + self.bin_basis[0] * (*nbx as f64);
             for (nby, oy, sy) in sy_list.as_slice() {
+                let center_xy = center_x + self.bin_basis[1] * (*nby as f64);
                 for (nbz, oz, sz) in sz_list.as_slice() {
+                    let target_center = center_xy + self.bin_basis[2] * (*nbz as f64);
+                    let offset_vec = ox + oy + oz;
+
+                    // Pruning check
+                    let center_shifted = target_center + offset_vec;
+                    let diff = center_shifted - pos_i;
+                    if diff.norm_squared() > prune_limit_sq {
+                        continue;
+                    }
+
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -717,10 +769,25 @@ impl CellList {
         );
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
+        let prune_limit = max_cutoff_sq.sqrt() + self.bin_bounding_radius;
+        let prune_limit_sq = prune_limit * prune_limit;
+        let pos_i = Vector3::new(pos_i_x, pos_i_y, pos_i_z);
 
         for (nbx, ox, sx) in sx_list.as_slice() {
+            let center_x = self.bin_origin + self.bin_basis[0] * (*nbx as f64);
             for (nby, oy, sy) in sy_list.as_slice() {
+                let center_xy = center_x + self.bin_basis[1] * (*nby as f64);
                 for (nbz, oz, sz) in sz_list.as_slice() {
+                    let target_center = center_xy + self.bin_basis[2] * (*nbz as f64);
+                    let offset_vec = ox + oy + oz;
+
+                    // Pruning check
+                    let center_shifted = target_center + offset_vec;
+                    let diff = center_shifted - pos_i;
+                    if diff.norm_squared() > prune_limit_sq {
+                        continue;
+                    }
+
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -865,10 +932,25 @@ impl CellList {
         );
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
+        let prune_limit = max_cutoff_sq.sqrt() + self.bin_bounding_radius;
+        let prune_limit_sq = prune_limit * prune_limit;
+        let pos_i = Vector3::new(pos_i_x, pos_i_y, pos_i_z);
 
         for (nbx, ox, sx) in sx_list.as_slice() {
+            let center_x = self.bin_origin + self.bin_basis[0] * (*nbx as f64);
             for (nby, oy, sy) in sy_list.as_slice() {
+                let center_xy = center_x + self.bin_basis[1] * (*nby as f64);
                 for (nbz, oz, sz) in sz_list.as_slice() {
+                    let target_center = center_xy + self.bin_basis[2] * (*nbz as f64);
+                    let offset_vec = ox + oy + oz;
+
+                    // Pruning check
+                    let center_shifted = target_center + offset_vec;
+                    let diff = center_shifted - pos_i;
+                    if diff.norm_squared() > prune_limit_sq {
+                        continue;
+                    }
+
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
                     let start_j = self.cell_starts[rank];
@@ -1013,12 +1095,29 @@ impl CellList {
 
         let i_orig = self.particles[i];
 
+        let prune_limit = cutoff_sq.sqrt() + self.bin_bounding_radius;
+        let prune_limit_sq = prune_limit * prune_limit;
+        let pos_i = Vector3::new(pos_i_x, pos_i_y, pos_i_z);
+
         for dx in -self.n_search.x..=self.n_search.x {
             for dy in -self.n_search.y..=self.n_search.y {
                 for dz in -self.n_search.z..=self.n_search.z {
                     let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
                     let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
                     let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
+
+                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
+
+                    // Pruning check
+                    let target_center = self.bin_origin
+                        + self.bin_basis[0] * (nbx as f64)
+                        + self.bin_basis[1] * (nby as f64)
+                        + self.bin_basis[2] * (nbz as f64);
+                    let center_shifted = target_center + offset_vec;
+                    let diff = center_shifted - pos_i;
+                    if diff.norm_squared() > prune_limit_sq {
+                        continue;
+                    }
 
                     let linear_idx = nbx + self.num_bins.x * (nby + self.num_bins.y * nbz);
                     let rank = self.bin_ranks[linear_idx];
@@ -1029,7 +1128,6 @@ impl CellList {
                         continue;
                     }
 
-                    let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
                     let is_shifted = sx != 0 || sy != 0 || sz != 0;
 
                     for sj in start_j..end_j {

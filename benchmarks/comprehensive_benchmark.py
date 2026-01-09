@@ -141,7 +141,9 @@ def run_benchmarks():
             t_v = []
             # Warmup
             for _ in range(2):
-                vesin.NeighborList(cutoff=cutoff, full_list=False).compute(pos, box, periodic=periodic)
+                vesin.NeighborList(cutoff=cutoff, full_list=False).compute(
+                    pos, box, periodic=periodic
+                )
 
             for _ in range(N_REPEAT):
                 calculator = vesin.NeighborList(cutoff=cutoff, full_list=False)
@@ -149,7 +151,7 @@ def run_benchmarks():
                 calculator.compute(pos, box, periodic=periodic)
                 end = time.perf_counter()
                 t_v.append(end - start)
-            
+
             mean_v = np.mean(t_v) * 1000
             std_v = np.std(t_v) * 1000
             results[cutoff][name]["vesin"] = {"mean": mean_v, "std": std_v}
@@ -167,9 +169,14 @@ def run_benchmarks():
 
             # neighborlist-rs (Max CPUs)
             n_cpus = psutil.cpu_count(logical=True)
-            mean_max, std_max = benchmark_neighborlist_rs_worker(filepath, cutoff, n_cpus)
+            mean_max, std_max = benchmark_neighborlist_rs_worker(
+                filepath, cutoff, n_cpus
+            )
             mean_max_ms, std_max_ms = mean_max * 1000, std_max * 1000
-            results[cutoff][name][f"rs_{n_cpus}"] = {"mean": mean_max_ms, "std": std_max_ms}
+            results[cutoff][name][f"rs_{n_cpus}"] = {
+                "mean": mean_max_ms,
+                "std": std_max_ms,
+            }
             print(
                 f"{name:<30} | {'neighborlist-rs':<15} | {n_cpus:<5} | {mean_max_ms:>8.2f} ± {std_max_ms:<6.2f}"
             )

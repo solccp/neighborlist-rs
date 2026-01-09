@@ -15,6 +15,13 @@ repos:
         files: \.rs$
         pass_filenames: false
 
+      - id: cargo-fmt-check
+        name: cargo fmt check
+        entry: cargo fmt --all -- --check
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
       - id: cargo-clippy
         name: cargo clippy
         entry: cargo clippy -- -D warnings

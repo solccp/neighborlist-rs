@@ -230,9 +230,13 @@ impl CellList {
         let vx = h_matrix * Vector3::new(1.0 / num_bins.x as f64, 0.0, 0.0);
         let vy = h_matrix * Vector3::new(0.0, 1.0 / num_bins.y as f64, 0.0);
         let vz = h_matrix * Vector3::new(0.0, 0.0, 1.0 / num_bins.z as f64);
-        let bin_origin =
-            h_matrix * Vector3::new(0.5 / num_bins.x as f64, 0.5 / num_bins.y as f64, 0.5 / num_bins.z as f64);
-        
+        let bin_origin = h_matrix
+            * Vector3::new(
+                0.5 / num_bins.x as f64,
+                0.5 / num_bins.y as f64,
+                0.5 / num_bins.z as f64,
+            );
+
         // Compute max radius (half of max diagonal)
         let d1 = (vx + vy + vz).norm_squared();
         let d2 = (vx + vy - vz).norm_squared();

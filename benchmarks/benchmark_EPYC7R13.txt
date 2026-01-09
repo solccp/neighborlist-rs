@@ -1,0 +1,153 @@
+
+================================================================================
+BENCHMARK CUTOFF: 6.0 Angstroms
+================================================================================
+System                         | Lib             | Threads | Time (ms)           
+--------------------------------------------------------------------------------
+Correctness: PASSED for 100 (non-PBC) (Cutoff 6.0) - Unique Pairs V:2269 RS:2269 | Total Edges V:2269 RS:2269
+100 (non-PBC)                  | Vesin           | Auto  |     0.09 ± 0.01  
+100 (non-PBC)                  | neighborlist-rs | 1     |     0.01 ± 0.00  
+100 (non-PBC)                  | neighborlist-rs | 64    |     0.01 ± 0.00  
+--------------------------------------------------------------------------------
+Correctness: PASSED for Two Clusters (non-PBC) (Cutoff 6.0) - Unique Pairs V:90 RS:90 | Total Edges V:90 RS:90
+Two Clusters (non-PBC)         | Vesin           | Auto  |     0.02 ± 0.00  
+Two Clusters (non-PBC)         | neighborlist-rs | 1     |     0.01 ± 0.01  
+Two Clusters (non-PBC)         | neighborlist-rs | 64    |     0.00 ± 0.00  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 1,000 (non-PBC) (Cutoff 6.0) - Unique Pairs V:39219 RS:39219 | Total Edges V:39219 RS:39219
+1,000 (non-PBC)                | Vesin           | Auto  |     4.60 ± 0.02  
+1,000 (non-PBC)                | neighborlist-rs | 1     |     2.09 ± 0.15  
+1,000 (non-PBC)                | neighborlist-rs | 64    |     1.66 ± 0.57  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 10,000 (non-PBC) (Cutoff 6.0) - Unique Pairs V:482454 RS:482454 | Total Edges V:482454 RS:482454
+10,000 (non-PBC)               | Vesin           | Auto  |   379.82 ± 2.42  
+10,000 (non-PBC)               | neighborlist-rs | 1     |    29.25 ± 8.48  
+10,000 (non-PBC)               | neighborlist-rs | 64    |    12.16 ± 1.65  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 20,000 (non-PBC) (Cutoff 6.0) - Unique Pairs V:994761 RS:994761 | Total Edges V:994761 RS:994761
+20,000 (non-PBC)               | Vesin           | Auto  |  1521.32 ± 11.34 
+20,000 (non-PBC)               | neighborlist-rs | 1     |    90.49 ± 0.67  
+20,000 (non-PBC)               | neighborlist-rs | 64    |    20.39 ± 2.01  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 1,000 (Ethanol PBC) (Cutoff 6.0) - Unique Pairs V:57840 RS:57840 | Total Edges V:57840 RS:57840
+1,000 (Ethanol PBC)            | Vesin           | Auto  |     4.99 ± 0.05  
+1,000 (Ethanol PBC)            | neighborlist-rs | 1     |     2.70 ± 0.02  
+1,000 (Ethanol PBC)            | neighborlist-rs | 64    |     3.15 ± 0.82  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 10,000 (Ethanol PBC) (Cutoff 6.0) - Unique Pairs V:568606 RS:568606 | Total Edges V:568606 RS:568606
+10,000 (Ethanol PBC)           | Vesin           | Auto  |    41.86 ± 1.04  
+10,000 (Ethanol PBC)           | neighborlist-rs | 1     |    45.36 ± 1.62  
+10,000 (Ethanol PBC)           | neighborlist-rs | 64    |    11.46 ± 1.18  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 20,000 (Ethanol PBC) (Cutoff 6.0) - Unique Pairs V:1132651 RS:1132651 | Total Edges V:1132651 RS:1132651
+20,000 (Ethanol PBC)           | Vesin           | Auto  |    79.60 ± 0.35  
+20,000 (Ethanol PBC)           | neighborlist-rs | 1     |    91.85 ± 1.10  
+20,000 (Ethanol PBC)           | neighborlist-rs | 64    |    20.38 ± 0.97  
+--------------------------------------------------------------------------------
+Correctness: PASSED for Si Bulk (PBC) (Cutoff 6.0) - Unique Pairs V:28 RS:28 | Total Edges V:160 RS:160
+Si Bulk (PBC)                  | Vesin           | Auto  |     0.06 ± 0.02  
+Si Bulk (PBC)                  | neighborlist-rs | 1     |     0.03 ± 0.01  
+Si Bulk (PBC)                  | neighborlist-rs | 64    |     0.18 ± 0.04  
+--------------------------------------------------------------------------------
+
+================================================================================
+BENCHMARK CUTOFF: 14.0 Angstroms
+================================================================================
+System                         | Lib             | Threads | Time (ms)           
+--------------------------------------------------------------------------------
+Correctness: PASSED for 100 (non-PBC) (Cutoff 14.0) - Unique Pairs V:4950 RS:4950 | Total Edges V:4950 RS:4950
+100 (non-PBC)                  | Vesin           | Auto  |     0.08 ± 0.00  
+100 (non-PBC)                  | neighborlist-rs | 1     |     0.03 ± 0.01  
+100 (non-PBC)                  | neighborlist-rs | 64    |     0.03 ± 0.00  
+--------------------------------------------------------------------------------
+Correctness: PASSED for Two Clusters (non-PBC) (Cutoff 14.0) - Unique Pairs V:190 RS:190 | Total Edges V:190 RS:190
+Two Clusters (non-PBC)         | Vesin           | Auto  |     0.02 ± 0.00  
+Two Clusters (non-PBC)         | neighborlist-rs | 1     |     0.00 ± 0.00  
+Two Clusters (non-PBC)         | neighborlist-rs | 64    |     0.00 ± 0.00  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 1,000 (non-PBC) (Cutoff 14.0) - Unique Pairs V:274621 RS:274621 | Total Edges V:274621 RS:274621
+1,000 (non-PBC)                | Vesin           | Auto  |     8.17 ± 0.01  
+1,000 (non-PBC)                | neighborlist-rs | 1     |     5.49 ± 0.02  
+1,000 (non-PBC)                | neighborlist-rs | 64    |     6.04 ± 0.45  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 10,000 (non-PBC) (Cutoff 14.0) - Unique Pairs V:4852979 RS:4852979 | Total Edges V:4852979 RS:4852979
+10,000 (non-PBC)               | Vesin           | Auto  |   545.56 ± 5.02  
+10,000 (non-PBC)               | neighborlist-rs | 1     |   300.20 ± 0.99  
+10,000 (non-PBC)               | neighborlist-rs | 64    |    45.66 ± 6.33  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 20,000 (non-PBC) (Cutoff 14.0) - Unique Pairs V:10563369 RS:10563369 | Total Edges V:10563369 RS:10563369
+20,000 (non-PBC)               | Vesin           | Auto  |  1857.27 ± 2.23  
+20,000 (non-PBC)               | neighborlist-rs | 1     |   696.77 ± 16.80 
+20,000 (non-PBC)               | neighborlist-rs | 64    |    94.50 ± 1.15  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 1,000 (Ethanol PBC) (Cutoff 14.0) - Unique Pairs V:480535 RS:480535 | Total Edges V:680982 RS:680982
+1,000 (Ethanol PBC)            | Vesin           | Auto  |   116.87 ± 0.16  
+1,000 (Ethanol PBC)            | neighborlist-rs | 1     |    57.43 ± 1.07  
+1,000 (Ethanol PBC)            | neighborlist-rs | 64    |    13.12 ± 1.30  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 10,000 (Ethanol PBC) (Cutoff 14.0) - Unique Pairs V:6807370 RS:6807370 | Total Edges V:6807370 RS:6807370
+10,000 (Ethanol PBC)           | Vesin           | Auto  |   513.14 ± 2.36  
+10,000 (Ethanol PBC)           | neighborlist-rs | 1     |   462.83 ± 0.53  
+10,000 (Ethanol PBC)           | neighborlist-rs | 64    |    62.54 ± 1.18  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 20,000 (Ethanol PBC) (Cutoff 14.0) - Unique Pairs V:13566000 RS:13566000 | Total Edges V:13566000 RS:13566000
+20,000 (Ethanol PBC)           | Vesin           | Auto  |  1811.78 ± 2.74  
+20,000 (Ethanol PBC)           | neighborlist-rs | 1     |  1194.75 ± 4.16  
+20,000 (Ethanol PBC)           | neighborlist-rs | 64    |   126.19 ± 1.72  
+--------------------------------------------------------------------------------
+Correctness: PASSED for Si Bulk (PBC) (Cutoff 14.0) - Unique Pairs V:28 RS:28 | Total Edges V:2064 RS:2064
+Si Bulk (PBC)                  | Vesin           | Auto  |     0.15 ± 0.02  
+Si Bulk (PBC)                  | neighborlist-rs | 1     |     0.09 ± 0.01  
+Si Bulk (PBC)                  | neighborlist-rs | 64    |     0.21 ± 0.04  
+--------------------------------------------------------------------------------
+
+================================================================================
+BENCHMARK CUTOFF: 30.0 Angstroms
+================================================================================
+System                         | Lib             | Threads | Time (ms)           
+--------------------------------------------------------------------------------
+Correctness: PASSED for 100 (non-PBC) (Cutoff 30.0) - Unique Pairs V:4950 RS:4950 | Total Edges V:4950 RS:4950
+100 (non-PBC)                  | Vesin           | Auto  |     0.08 ± 0.00  
+100 (non-PBC)                  | neighborlist-rs | 1     |     0.02 ± 0.00  
+100 (non-PBC)                  | neighborlist-rs | 64    |     0.02 ± 0.00  
+--------------------------------------------------------------------------------
+Correctness: PASSED for Two Clusters (non-PBC) (Cutoff 30.0) - Unique Pairs V:190 RS:190 | Total Edges V:190 RS:190
+Two Clusters (non-PBC)         | Vesin           | Auto  |     0.02 ± 0.00  
+Two Clusters (non-PBC)         | neighborlist-rs | 1     |     0.01 ± 0.00  
+Two Clusters (non-PBC)         | neighborlist-rs | 64    |     0.01 ± 0.00  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 1,000 (non-PBC) (Cutoff 30.0) - Unique Pairs V:499453 RS:499453 | Total Edges V:499453 RS:499453
+1,000 (non-PBC)                | Vesin           | Auto  |     5.10 ± 0.01  
+1,000 (non-PBC)                | neighborlist-rs | 1     |     8.13 ± 0.14  
+1,000 (non-PBC)                | neighborlist-rs | 64    |     9.63 ± 1.18  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 10,000 (non-PBC) (Cutoff 30.0) - Unique Pairs V:27462470 RS:27462470 | Total Edges V:27462470 RS:27462470
+10,000 (non-PBC)               | Vesin           | Auto  |  1034.15 ± 16.34 
+10,000 (non-PBC)               | neighborlist-rs | 1     |  1356.46 ± 29.89 
+10,000 (non-PBC)               | neighborlist-rs | 64    |   219.30 ± 4.15  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 20,000 (non-PBC) (Cutoff 30.0) - Unique Pairs V:68913231 RS:68913231 | Total Edges V:68913231 RS:68913231
+20,000 (non-PBC)               | Vesin           | Auto  |  3876.81 ± 34.85 
+20,000 (non-PBC)               | neighborlist-rs | 1     |  3772.73 ± 35.56 
+20,000 (non-PBC)               | neighborlist-rs | 64    |   557.10 ± 2.31  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 1,000 (Ethanol PBC) (Cutoff 30.0) - Unique Pairs V:507528 RS:507528 | Total Edges V:6721979 RS:6721979
+1,000 (Ethanol PBC)            | Vesin           | Auto  |   623.06 ± 7.25  
+1,000 (Ethanol PBC)            | neighborlist-rs | 1     |   365.07 ± 0.53  
+1,000 (Ethanol PBC)            | neighborlist-rs | 64    |    63.44 ± 1.57  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 10,000 (Ethanol PBC) (Cutoff 30.0) - Unique Pairs V:47128563 RS:47128563 | Total Edges V:66539312 RS:66539312
+10,000 (Ethanol PBC)           | Vesin           | Auto  | 11857.51 ± 81.79 
+10,000 (Ethanol PBC)           | neighborlist-rs | 1     |  5721.73 ± 45.84 
+10,000 (Ethanol PBC)           | neighborlist-rs | 64    |   575.30 ± 1.66  
+--------------------------------------------------------------------------------
+Correctness: PASSED for 20,000 (Ethanol PBC) (Cutoff 30.0) - Unique Pairs V:129680344 RS:129680344 | Total Edges V:133092897 RS:133092897
+20,000 (Ethanol PBC)           | Vesin           | Auto  | 46038.65 ± 81.79 
+20,000 (Ethanol PBC)           | neighborlist-rs | 1     | 16629.28 ± 87.20 
+20,000 (Ethanol PBC)           | neighborlist-rs | 64    |  1446.27 ± 32.67 
+--------------------------------------------------------------------------------
+Correctness: PASSED for Si Bulk (PBC) (Cutoff 30.0) - Unique Pairs V:28 RS:28 | Total Edges V:19872 RS:19872
+Si Bulk (PBC)                  | Vesin           | Auto  |     0.79 ± 0.06  
+Si Bulk (PBC)                  | neighborlist-rs | 1     |     0.47 ± 0.01  
+Si Bulk (PBC)                  | neighborlist-rs | 64    |     0.60 ± 0.08  
+--------------------------------------------------------------------------------

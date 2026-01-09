@@ -10,8 +10,8 @@ import vesin
 import neighborlist_rs
 
 # Benchmark settings
-CUTOFFS = [6.0, 14.0, 20.0]
-N_REPEAT = 7  # Reduced repeat for faster execution of more cases
+CUTOFFS = [6.0, 14.0, 30.0]
+N_REPEAT = 15  # Increased for better statistics
 
 
 def benchmark_neighborlist_rs_worker(filepath, cutoff, n_threads):
@@ -37,19 +37,24 @@ if not np.all(atoms.get_cell() == 0):
     h_T = atoms.get_cell()[:].T.tolist()
     cell_obj = neighborlist_rs.PyCell(h_T)
 
+# Warmup
+for _ in range(2):
+    neighborlist_rs.build_neighborlists(cell_obj, pos, {cutoff}, parallel={use_parallel})
+
 times = []
 for _ in range({N_REPEAT}):
     start = time.perf_counter()
     neighborlist_rs.build_neighborlists(cell_obj, pos, {cutoff}, parallel={use_parallel})
     end = time.perf_counter()
     times.append(end - start)
-print(np.mean(times))
+print(str(np.mean(times)) + "," + str(np.std(times)))
 """,
     ]
     res = subprocess.check_output(cmd).decode().strip()
-    # The last line should be the mean time
+    # The last line should be the mean,std
     last_line = res.splitlines()[-1]
-    return float(last_line)
+    parts = last_line.split(",")
+    return float(parts[0]), float(parts[1])
 
 
 def run_benchmarks():
@@ -80,7 +85,7 @@ def run_benchmarks():
         print(f"\n{'=' * 80}")
         print(f"BENCHMARK CUTOFF: {cutoff} Angstroms")
         print(f"{'=' * 80}")
-        print(f"{'System':<30} | {'Lib':<15} | {'Threads':<5} | {'Time (ms)':<10}")
+        print(f"{'System':<30} | {'Lib':<15} | {'Threads':<5} | {'Time (ms)':<20}")
         print("-" * 80)
 
         for name, filepath, atoms in systems_data:
@@ -118,10 +123,10 @@ def run_benchmarks():
             i_rs, j_rs = edge_index[0], edge_index[1]
 
             p_v = set((min(u, v), max(u, v)) for u, v in zip(i_v, j_v) if u != v)
-            p_rs = set((min(u, v), max(u, v)) for u, v in zip(i_rs, j_rs))
+            p_rs = set((min(u, v), max(u, v)) for u, v in zip(i_rs, j_rs) if u != v)
 
             edges_v = sum(1 for u, v in zip(i_v, j_v) if u != v)
-            edges_rs = len(i_rs)
+            edges_rs = sum(1 for u, v in zip(i_rs, j_rs) if u != v)
 
             if p_v != p_rs:
                 print(
@@ -134,30 +139,39 @@ def run_benchmarks():
 
             # Vesin Benchmark
             t_v = []
+            # Warmup
+            for _ in range(2):
+                vesin.NeighborList(cutoff=cutoff, full_list=False).compute(pos, box, periodic=periodic)
+
             for _ in range(N_REPEAT):
                 calculator = vesin.NeighborList(cutoff=cutoff, full_list=False)
                 start = time.perf_counter()
                 calculator.compute(pos, box, periodic=periodic)
                 end = time.perf_counter()
                 t_v.append(end - start)
-            results[cutoff][name]["vesin"] = np.mean(t_v) * 1000
+            
+            mean_v = np.mean(t_v) * 1000
+            std_v = np.std(t_v) * 1000
+            results[cutoff][name]["vesin"] = {"mean": mean_v, "std": std_v}
             print(
-                f"{name:<30} | {'Vesin':<15} | {'Auto':<5} | {results[cutoff][name]['vesin']:<10.2f}"
+                f"{name:<30} | {'Vesin':<15} | {'Auto':<5} | {mean_v:>8.2f} ± {std_v:<6.2f}"
             )
 
             # neighborlist-rs (1 CPU)
-            t1 = benchmark_neighborlist_rs_worker(filepath, cutoff, 1)
-            results[cutoff][name]["rs_1"] = t1 * 1000
+            mean_1, std_1 = benchmark_neighborlist_rs_worker(filepath, cutoff, 1)
+            mean_1_ms, std_1_ms = mean_1 * 1000, std_1 * 1000
+            results[cutoff][name]["rs_1"] = {"mean": mean_1_ms, "std": std_1_ms}
             print(
-                f"{name:<30} | {'neighborlist-rs':<15} | {'1':<5} | {results[cutoff][name]['rs_1']:<10.2f}"
+                f"{name:<30} | {'neighborlist-rs':<15} | {'1':<5} | {mean_1_ms:>8.2f} ± {std_1_ms:<6.2f}"
             )
 
             # neighborlist-rs (Max CPUs)
-            n_cpus = min(8, psutil.cpu_count(logical=True))
-            t_max = benchmark_neighborlist_rs_worker(filepath, cutoff, n_cpus)
-            results[cutoff][name][f"rs_{n_cpus}"] = t_max * 1000
+            n_cpus = psutil.cpu_count(logical=True)
+            mean_max, std_max = benchmark_neighborlist_rs_worker(filepath, cutoff, n_cpus)
+            mean_max_ms, std_max_ms = mean_max * 1000, std_max * 1000
+            results[cutoff][name][f"rs_{n_cpus}"] = {"mean": mean_max_ms, "std": std_max_ms}
             print(
-                f"{name:<30} | {'neighborlist-rs':<15} | {n_cpus:<5} | {results[cutoff][name][f'rs_{n_cpus}']:<10.2f}"
+                f"{name:<30} | {'neighborlist-rs':<15} | {n_cpus:<5} | {mean_max_ms:>8.2f} ± {std_max_ms:<6.2f}"
             )
             print("-" * 80)
     return results

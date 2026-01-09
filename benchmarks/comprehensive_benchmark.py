@@ -3,8 +3,6 @@ import time
 import numpy as np
 import os
 import psutil
-import subprocess
-import sys
 from ase.io import read
 import vesin
 import neighborlist_rs
@@ -14,47 +12,20 @@ CUTOFFS = [6.0, 14.0, 30.0]
 N_REPEAT = 15  # Increased for better statistics
 
 
-def benchmark_neighborlist_rs_worker(filepath, cutoff, n_threads):
-    """Executes the benchmark in a subprocess to ensure Rayon pool is sized correctly."""
-    use_parallel = "True" if n_threads > 1 else "False"
-    cmd = [
-        sys.executable,
-        "-c",
-        f"""
-import os
-os.environ["RAYON_NUM_THREADS"] = "{n_threads}"
-import neighborlist_rs
-import numpy as np
-import time
-from ase.io import read
+def run_benchmark_rs(cell_obj, pos, cutoff, parallel):
+    """Executes the benchmark in-process."""
+    # Warmup
+    for _ in range(2):
+        neighborlist_rs.build_neighborlists(cell_obj, pos, cutoff, parallel=parallel)
 
-atoms = read("{filepath}")
-pos = atoms.get_positions()
+    times = []
+    for _ in range(N_REPEAT):
+        start = time.perf_counter()
+        neighborlist_rs.build_neighborlists(cell_obj, pos, cutoff, parallel=parallel)
+        end = time.perf_counter()
+        times.append(end - start)
 
-# Determine if we have a valid cell
-cell_obj = None
-if not np.all(atoms.get_cell() == 0):
-    h_T = atoms.get_cell()[:].T.tolist()
-    cell_obj = neighborlist_rs.PyCell(h_T)
-
-# Warmup
-for _ in range(2):
-    neighborlist_rs.build_neighborlists(cell_obj, pos, {cutoff}, parallel={use_parallel})
-
-times = []
-for _ in range({N_REPEAT}):
-    start = time.perf_counter()
-    neighborlist_rs.build_neighborlists(cell_obj, pos, {cutoff}, parallel={use_parallel})
-    end = time.perf_counter()
-    times.append(end - start)
-print(str(np.mean(times)) + "," + str(np.std(times)))
-""",
-    ]
-    res = subprocess.check_output(cmd).decode().strip()
-    # The last line should be the mean,std
-    last_line = res.splitlines()[-1]
-    parts = last_line.split(",")
-    return float(parts[0]), float(parts[1])
+    return np.mean(times), np.std(times)
 
 
 def run_benchmarks():
@@ -160,7 +131,7 @@ def run_benchmarks():
             )
 
             # neighborlist-rs (1 CPU)
-            mean_1, std_1 = benchmark_neighborlist_rs_worker(filepath, cutoff, 1)
+            mean_1, std_1 = run_benchmark_rs(cell_rs, pos, cutoff, parallel=False)
             mean_1_ms, std_1_ms = mean_1 * 1000, std_1 * 1000
             results[cutoff][name]["rs_1"] = {"mean": mean_1_ms, "std": std_1_ms}
             print(
@@ -169,9 +140,7 @@ def run_benchmarks():
 
             # neighborlist-rs (Max CPUs)
             n_cpus = psutil.cpu_count(logical=True)
-            mean_max, std_max = benchmark_neighborlist_rs_worker(
-                filepath, cutoff, n_cpus
-            )
+            mean_max, std_max = run_benchmark_rs(cell_rs, pos, cutoff, parallel=True)
             mean_max_ms, std_max_ms = mean_max * 1000, std_max * 1000
             results[cutoff][name][f"rs_{n_cpus}"] = {
                 "mean": mean_max_ms,

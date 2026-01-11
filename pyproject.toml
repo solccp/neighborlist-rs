@@ -33,3 +33,5 @@ Homepage = "https://github.com/solccp/neighborlist-rs"
 Repository = "https://github.com/solccp/neighborlist-rs"
 Issues = "https://github.com/solccp/neighborlist-rs/issues"
 
+[tool.maturin]
+features = ["python"]

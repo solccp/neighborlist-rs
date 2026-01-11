@@ -1,4 +1,4 @@
-use neighborlist_rs::{build_neighborlists, NeighborList};
+use neighborlist_rs::build_neighborlists;
 
 #[test]
 fn test_build_neighborlists_simple() {

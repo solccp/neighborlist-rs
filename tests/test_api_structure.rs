@@ -1,4 +1,4 @@
-use neighborlist_rs::{NeighborList, build_neighborlists};
+use neighborlist_rs::NeighborList;
 
 #[test]
 fn test_neighborlist_struct_exists() {

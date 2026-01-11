@@ -1,3 +1,4 @@
+use crate::batch;
 use crate::single;
 use nalgebra::{Matrix3, Vector3};
 
@@ -26,6 +27,52 @@ pub fn build_neighborlists(
     let cell_info = cell.map(|(h, pbc)| (convert_cell(h), Vector3::new(pbc[0], pbc[1], pbc[2])));
 
     let (mut edge_i, edge_j, shifts) = single::search_single(&pos_vec, cell_info, cutoff, parallel)?;
+
+    edge_i.extend(edge_j);
+
+    Ok(NeighborList {
+        edge_index: edge_i,
+        shifts,
+    })
+}
+
+/// Build neighbor lists for a batch of systems.
+pub fn build_neighborlists_batch(
+    positions: &[[f64; 3]],
+    batch: &[i32],
+    cutoff: f64,
+    cells: Option<&[Option<([[f64; 3]; 3], [bool; 3])>]>,
+    parallel: bool,
+) -> Result<NeighborList, String> {
+    let pos_vec = convert_positions(positions);
+
+    let n_systems = if batch.is_empty() {
+        0
+    } else {
+        let mut count = 1;
+        let mut curr = batch[0];
+        for &b in batch.iter().skip(1) {
+            if b != curr {
+                count += 1;
+                curr = b;
+            }
+        }
+        count
+    };
+
+    let cells_vec: Vec<Option<(Matrix3<f64>, Vector3<bool>)>> = if let Some(c_slice) = cells {
+        c_slice
+            .iter()
+            .map(|opt| {
+                opt.map(|(h, pbc)| (convert_cell(&h), Vector3::new(pbc[0], pbc[1], pbc[2])))
+            })
+            .collect()
+    } else {
+        vec![None; n_systems]
+    };
+
+    let (mut edge_i, edge_j, shifts) =
+        batch::search_batch(&pos_vec, batch, &cells_vec, cutoff, parallel)?;
 
     edge_i.extend(edge_j);
 

@@ -11,8 +11,8 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Single System API' (Protocol in workflow.md)
 
 ## Phase 3: Batched API
-- [~] Task: Implement the public-facing `build_neighborlists_batch` function in `src/api.rs`.
-- [ ] Task: Add unit tests in Rust to verify `build_neighborlists_batch` with mixed PBC/non-PBC systems.
+- [x] Task: Implement the public-facing `build_neighborlists_batch` function in `src/api.rs`.
+- [x] Task: Add unit tests in Rust to verify `build_neighborlists_batch` with mixed PBC/non-PBC systems.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Batched API' (Protocol in workflow.md)
 
 ## Phase 4: Integration & Documentation

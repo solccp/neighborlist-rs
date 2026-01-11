@@ -5,10 +5,10 @@
 - [x] Task: Implement conversions from standard Rust types (`[f64; 3]`, etc.) to internal `nalgebra` types.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Types' (Protocol in workflow.md)
 
-## Phase 2: Single System API
+## Phase 2: Single System API [checkpoint: e6541a8]
 - [x] Task: Implement the public-facing `build_neighborlists` function in `src/api.rs`.
 - [x] Task: Add unit tests in Rust to verify `build_neighborlists` for both PBC and non-PBC cases.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Single System API' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Single System API' (Protocol in workflow.md)
 
 ## Phase 3: Batched API
 - [ ] Task: Implement the public-facing `build_neighborlists_batch` function in `src/api.rs`.

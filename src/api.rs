@@ -27,3 +27,41 @@ pub fn build_neighborlists(
         shifts: vec![],
     })
 }
+
+fn convert_positions(positions: &[[f64; 3]]) -> Vec<Vector3<f64>> {
+    positions
+        .iter()
+        .map(|p| Vector3::new(p[0], p[1], p[2]))
+        .collect()
+}
+
+fn convert_cell(cell: &[[f64; 3]; 3]) -> Matrix3<f64> {
+    Matrix3::new(
+        cell[0][0], cell[0][1], cell[0][2],
+        cell[1][0], cell[1][1], cell[1][2],
+        cell[2][0], cell[2][1], cell[2][2],
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::Vector3;
+
+    #[test]
+    fn test_convert_positions() {
+        let input = [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]];
+        let output = convert_positions(&input);
+        assert_eq!(output.len(), 2);
+        assert_eq!(output[0], Vector3::new(0.0, 0.0, 0.0));
+        assert_eq!(output[1], Vector3::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn test_convert_cell() {
+        let input = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let output = convert_cell(&input);
+        assert_eq!(output[(0, 0)], 1.0);
+        assert_eq!(output[(2, 2)], 1.0);
+    }
+}

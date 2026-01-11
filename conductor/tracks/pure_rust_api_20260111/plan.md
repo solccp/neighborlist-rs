@@ -1,9 +1,9 @@
 # Plan: Pure Rust API Surface Implementation
 
-## Phase 1: Foundation & Types
+## Phase 1: Foundation & Types [checkpoint: e99fb08]
 - [x] Task: Define the public `NeighborList` struct and associated types in a new module.
 - [x] Task: Implement conversions from standard Rust types (`[f64; 3]`, etc.) to internal `nalgebra` types.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Types' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Types' (Protocol in workflow.md)
 
 ## Phase 2: Single System API
 - [ ] Task: Implement the public-facing `build_neighborlists` function in `src/api.rs`.

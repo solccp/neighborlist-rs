@@ -1,3 +1,4 @@
+use crate::single;
 use nalgebra::{Matrix3, Vector3};
 
 /// A container for neighbor list results.
@@ -21,10 +22,16 @@ pub fn build_neighborlists(
     cell: Option<(&[[f64; 3]; 3], [bool; 3])>,
     parallel: bool,
 ) -> Result<NeighborList, String> {
-    // Stub implementation
+    let pos_vec = convert_positions(positions);
+    let cell_info = cell.map(|(h, pbc)| (convert_cell(h), Vector3::new(pbc[0], pbc[1], pbc[2])));
+
+    let (mut edge_i, edge_j, shifts) = single::search_single(&pos_vec, cell_info, cutoff, parallel)?;
+
+    edge_i.extend(edge_j);
+
     Ok(NeighborList {
-        edge_index: vec![],
-        shifts: vec![],
+        edge_index: edge_i,
+        shifts,
     })
 }
 

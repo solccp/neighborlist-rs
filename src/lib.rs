@@ -7,7 +7,7 @@ pub mod single;
 
 pub use api::*;
 
-#[cfg(feature = "python")]
+#[cfg(any(feature = "python", feature = "python-test"))]
 mod python_api;
 
 #[cfg(feature = "dhat-heap")]

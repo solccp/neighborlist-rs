@@ -25,6 +25,7 @@ dhat = { version = "0.3", optional = true }
 [features]
 default = []
 python = ["dep:pyo3", "dep:numpy", "pyo3/extension-module"]
+python-test = ["dep:pyo3", "dep:numpy"]
 dhat-heap = ["dep:dhat"]
 
 [dev-dependencies]

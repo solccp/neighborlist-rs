@@ -624,3 +624,36 @@ fn neighborlist_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_stack_threshold, m)?)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pyo3::types::PyDict;
+
+    #[test]
+    fn test_python_api_basic() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let res = get_brute_force_threshold();
+            assert!(res > 0);
+
+            let threads = get_num_threads();
+            assert!(threads > 0);
+        });
+    }
+
+    #[test]
+    fn test_build_neighborlists_empty() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions = numpy::PyArray2::<f64>::zeros(py, [0, 3], false);
+            let cutoff = 1.0;
+            let res = build_neighborlists(py, None, positions.readonly(), cutoff, false).unwrap();
+            let edge_index = res.get_item("edge_index").unwrap().unwrap();
+            let shift = res.get_item("shift").unwrap().unwrap();
+            // Checking basic validity
+            assert!(edge_index.extract::<numpy::PyReadonlyArray2<i64>>().is_ok());
+            assert!(shift.extract::<numpy::PyReadonlyArray2<i32>>().is_ok());
+        });
+    }
+}

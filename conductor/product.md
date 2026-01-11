@@ -28,8 +28,10 @@ To build a high-performance, safe, and deterministic neighborlist construction l
 -   **Output:**
     -   Edge indices (`i`, `j`) and Shift vectors (`sx`, `sy`, `sz`).
     -   Configurable directed/undirected edges.
--   **Integration:**
-    -   Zero-copy (where possible) Python bindings via PyO3/maturin.
+- **Integration:**
+    - Pure Rust API for native integration in high-performance applications.
+    - Zero-copy (where possible) Python bindings via PyO3/maturin.
+
     -   Direct integration with ASE (Atomic Simulation Environment) for seamless workflow.
 
 ## Advanced Features (Phase 2)

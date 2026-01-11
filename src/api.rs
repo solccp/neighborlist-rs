@@ -118,4 +118,19 @@ mod tests {
         assert_eq!(output[(0, 0)], 1.0);
         assert_eq!(output[(2, 2)], 1.0);
     }
+
+    #[test]
+    fn test_api_batch_empty() {
+        let res = build_neighborlists_batch(&[], &[], 1.0, None, false).unwrap();
+        assert!(res.edge_index.is_empty());
+    }
+
+    #[test]
+    fn test_api_batch_no_cells() {
+        // 2 systems, no cells provided (should use None -> auto-box)
+        let positions = [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]];
+        let batch = [0, 1];
+        let res = build_neighborlists_batch(&positions, &batch, 1.0, None, false).unwrap();
+        assert!(res.edge_index.is_empty());
+    }
 }

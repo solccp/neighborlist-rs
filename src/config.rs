@@ -37,3 +37,29 @@ pub fn set_stack_threshold(val: usize) {
     // Only use stack if requested threshold is within MAX_STACK_SIZE
     STACK_THRESHOLD.store(val.min(MAX_STACK_SIZE), Ordering::Relaxed);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_accessors() {
+        let original_bf = get_brute_force_threshold();
+        let original_par = get_parallel_threshold();
+        let original_stack = get_stack_threshold();
+
+        set_brute_force_threshold(123);
+        assert_eq!(get_brute_force_threshold(), 123);
+
+        set_parallel_threshold(456);
+        assert_eq!(get_parallel_threshold(), 456);
+
+        set_stack_threshold(789);
+        assert_eq!(get_stack_threshold(), 789);
+
+        // Restore defaults
+        set_brute_force_threshold(original_bf);
+        set_parallel_threshold(original_par);
+        set_stack_threshold(original_stack);
+    }
+}

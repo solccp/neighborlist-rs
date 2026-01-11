@@ -43,11 +43,10 @@ impl Cell {
     /// Returns the perpendicular widths of the cell (distances between parallel faces).
     /// d_i = 1 / |h_inv.row(i)|
     pub fn perpendicular_widths(&self) -> Vector3<f64> {
-        Vector3::new(
-            1.0 / self.h_inv.row(0).norm(),
-            1.0 / self.h_inv.row(1).norm(),
-            1.0 / self.h_inv.row(2).norm(),
-        )
+        let wx = 1.0 / self.h_inv.row(0).norm();
+        let wy = 1.0 / self.h_inv.row(1).norm();
+        let wz = 1.0 / self.h_inv.row(2).norm();
+        Vector3::new(wx, wy, wz)
     }
 
     pub fn wrap(&self, cart: &Vector3<f64>) -> Vector3<f64> {
@@ -213,5 +212,29 @@ mod tests {
         assert_relative_eq!(disp.x, -2.0);
         assert_relative_eq!(disp.y, 8.0);
         assert_relative_eq!(disp.z, 8.0);
+    }
+
+    #[test]
+    fn test_perpendicular_widths() {
+        // Orthogonal
+        let h = Matrix3::new(10.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 2.0);
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
+        let perp = cell.perpendicular_widths();
+        assert_relative_eq!(perp.x, 10.0);
+        assert_relative_eq!(perp.y, 5.0);
+        assert_relative_eq!(perp.z, 2.0);
+
+        // Skewed (volume preserving shear)
+        // [1 1 0]
+        // [0 1 0]
+        // [0 0 1]
+        // x vector is (1,0,0), y is (1,1,0). perp distance for x is distance between x=0 and x=1 planes... wait.
+        // H = [1 1 0; 0 1 0; 0 0 1]
+        // H_inv = [1 -1 0; 0 1 0; 0 0 1]
+        // row 0 of H_inv is (1, -1, 0), norm sqrt(2). width = 1/sqrt(2) approx 0.707
+        let h = Matrix3::new(1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
+        let perp = cell.perpendicular_widths();
+        assert_relative_eq!(perp.x, 1.0 / 2.0f64.sqrt());
     }
 }

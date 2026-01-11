@@ -158,7 +158,11 @@ pub fn search_batch_multi(
         return Err("positions and batch must have the same length".to_string());
     }
     if n_total == 0 || cutoffs.is_empty() {
-        return Ok(vec![(vec![], vec![], vec![]); cutoffs.len()]);
+        let mut res = Vec::with_capacity(cutoffs.len());
+        for _ in 0..cutoffs.len() {
+            res.push((Vec::new(), Vec::new(), Vec::new()));
+        }
+        return Ok(res);
     }
 
     // 1. Determine system boundaries
@@ -454,6 +458,38 @@ mod tests {
     }
 
     #[test]
+    fn test_batch_search_multi_empty() {
+        // Test empty positions
+        let results = search_batch_multi(&[], &[], &[], &[1.0], true).unwrap();
+        assert!(results[0].0.is_empty());
+
+        // Test empty cutoffs
+        let positions = vec![Vector3::zeros()];
+        let batch = vec![0];
+        let cells = vec![None];
+        let results_no_cutoffs = search_batch_multi(&positions, &batch, &cells, &[], true).unwrap();
+        assert!(results_no_cutoffs.is_empty());
+    }
+
+    #[test]
+    fn test_batch_search_multi_empty_atoms_but_valid_cutoffs() {
+        // This targets the specific return Ok(...) line when n_total == 0 but cutoffs is not empty
+        // Actually the first case in test_batch_search_multi_empty does this: &[], ..., &[1.0].
+        // Let's re-verify the code.
+        // if n_total == 0 || cutoffs.is_empty() { return Ok(...) }
+        // The branch is taken if EITHER is true.
+        // If I test empty positions (n_total=0) and cutoffs=[1.0], it enters.
+        // If I test positions (n_total=1) and cutoffs=[], it enters.
+        // I have tested both.
+        // Maybe tarpaulin marks it uncovered because it's a compound condition and one side is always true in one test?
+        // But checking coverage, line 158 is the return statement itself.
+        // I will keep this test explicitly separate to be sure.
+        let cutoffs = vec![1.0, 2.0];
+        let results = search_batch_multi(&[], &[], &[], &cutoffs, false).unwrap();
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
     fn test_batch_search_errors() {
         let positions = vec![Vector3::new(0.0, 0.0, 0.0)];
         let batch = vec![0, 1]; // mismatch length
@@ -463,5 +499,73 @@ mod tests {
         let batch2 = vec![0];
         let cells2 = vec![]; // mismatch n_systems
         assert!(search_batch(&positions, &batch2, &cells2, 1.0, false).is_err());
+    }
+
+    #[test]
+    fn test_batch_search_multi_errors() {
+        let positions = vec![Vector3::new(0.0, 0.0, 0.0)];
+        let batch = vec![0];
+        let cells = vec![]; // Mismatch n_systems
+        let cutoffs = vec![1.0];
+        assert!(search_batch_multi(&positions, &batch, &cells, &cutoffs, false).is_err());
+    }
+
+    #[test]
+    fn test_batch_search_force_cell_list_serial() {
+        // Force CellList by violating MIC (cutoff * 2 > box)
+        // Box 10, Cutoff 6. 12 > 10.
+        // Parallel = false
+        let h = Matrix3::identity() * 10.0;
+        let cell = Some((h, Vector3::new(true, true, true)));
+        let positions = vec![
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(2.0, 2.0, 2.0),
+        ];
+        let batch = vec![0, 0];
+        let cells = vec![cell];
+
+        let (ei, ej, _) = search_batch(&positions, &batch, &cells, 6.0, false).unwrap();
+        // Should find neighbors (dist ~1.73 < 6.0)
+        assert_eq!(ei.len(), 1);
+        assert_eq!(ej.len(), 1);
+    }
+
+    #[test]
+    fn test_batch_search_force_cell_list_parallel() {
+        // Force CellList by violating MIC
+        // Parallel = true
+        // Need n_atoms >= PARALLEL_THRESHOLD (300) to trigger optimized parallel path
+        // but we can't easily change threshold here without racing.
+        // So we create > 300 atoms.
+        let h = Matrix3::identity() * 50.0;
+        let cell = Some((h, Vector3::new(true, true, true)));
+        let mut positions = Vec::new();
+        let mut batch = Vec::new();
+        for i in 0..305 {
+             positions.push(Vector3::new(i as f64 * 0.1, 0.0, 0.0));
+             batch.push(0);
+        }
+        let cells = vec![cell];
+
+        // Cutoff 30.0 (30*2 > 50). Violates MIC.
+        let (ei, _, _) = search_batch(&positions, &batch, &cells, 30.0, true).unwrap();
+        assert!(!ei.is_empty());
+    }
+
+    #[test]
+    fn test_batch_search_multi_force_cell_list() {
+        // Force CellList in multi search by violating MIC
+        let h = Matrix3::identity() * 10.0;
+        let cell = Some((h, Vector3::new(true, true, true)));
+        let positions = vec![
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(2.0, 2.0, 2.0),
+        ];
+        let batch = vec![0, 0];
+        let cells = vec![cell];
+        let cutoffs = vec![6.0]; // Violates MIC
+
+        let results = search_batch_multi(&positions, &batch, &cells, &cutoffs, false).unwrap();
+        assert_eq!(results[0].0.len(), 1);
     }
 }

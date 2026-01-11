@@ -92,18 +92,18 @@ def test_batched_pbc():
         print("\n" + "=" * 60)
         print("✓✓✓ BUG FIX VERIFIED - PERIODIC IMAGES ARE NOW INCLUDED ✓✓✓")
         print("=" * 60)
-        return True
     else:
         print("\n" + "=" * 60)
         print("❌❌❌ BUG STILL PRESENT - PERIODIC IMAGES MISSING ❌❌❌")
         print("=" * 60)
-        return False
+
+    assert success
 
 
 if __name__ == "__main__":
     try:
-        success = test_batched_pbc()
-        exit(0 if success else 1)
+        test_batched_pbc()
+        exit(0)
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         import traceback

@@ -1,0 +1,8 @@
+{
+  "track_id": "pure_rust_api_20260111",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-01-11T12:00:00Z",
+  "updated_at": "2026-01-11T12:00:00Z",
+  "description": "Expose a pure Rust API surface for building neighbor lists, supporting both single and batched systems with idiomatic Rust types."
+}

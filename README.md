@@ -55,6 +55,19 @@ positions = np.array([[0, 0, 0], [1, 1, 1]], dtype=float)
 result = neighborlist_rs.build_neighborlists(None, positions, cutoff=5.0)
 ```
 
+## Usage (Rust)
+
+Refer to [RUST_API.md](https://github.com/solccp/neighborlist-rs/blob/master/RUST_API.md) for detailed Rust documentation.
+
+### Single System Search
+```rust
+use neighborlist_rs::build_neighborlists;
+
+let positions = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
+let cutoff = 1.5;
+let result = build_neighborlists(&positions, cutoff, None, true).unwrap();
+```
+
 ## Performance
 
 `neighborlist-rs` is designed for high-performance atomistic simulations, outperforming established baselines across a wide range of system sizes and conditions.

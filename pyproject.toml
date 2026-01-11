@@ -33,5 +33,14 @@ Homepage = "https://github.com/solccp/neighborlist-rs"
 Repository = "https://github.com/solccp/neighborlist-rs"
 Issues = "https://github.com/solccp/neighborlist-rs/issues"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "numpy>=2.0.0",
+    "ase>=3.22.0",
+    "ruff>=0.14.11",
+    "maturin>=1.5.0",
+]
+
 [tool.maturin]
 features = ["python"]

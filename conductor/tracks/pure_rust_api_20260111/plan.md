@@ -15,8 +15,8 @@
 - [x] Task: Add unit tests in Rust to verify `build_neighborlists_batch` with mixed PBC/non-PBC systems.
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Batched API' (Protocol in workflow.md)
 
-## Phase 4: Integration & Documentation
+## Phase 4: Integration & Documentation [checkpoint: bbcb798]
 - [x] Task: Re-export the public API at the crate root in `src/lib.rs`.
 - [x] Task: Update `PYTHON_API.md` or add a `RUST_API.md` (if appropriate) to document usage.
 - [x] Task: Final verification of Python bindings to ensure no regressions.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Integration & Documentation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Integration & Documentation' (Protocol in workflow.md)

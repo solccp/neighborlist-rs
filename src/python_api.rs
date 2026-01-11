@@ -626,6 +626,7 @@ fn neighborlist_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use pyo3::types::PyDict;
@@ -633,7 +634,7 @@ mod tests {
     #[test]
     fn test_python_api_basic() {
         pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::with_gil(|_py| {
             let res = get_brute_force_threshold();
             assert!(res > 0);
 
@@ -654,6 +655,358 @@ mod tests {
             // Checking basic validity
             assert!(edge_index.extract::<numpy::PyReadonlyArray2<i64>>().is_ok());
             assert!(shift.extract::<numpy::PyReadonlyArray2<i32>>().is_ok());
+        });
+    }
+
+    #[test]
+    fn test_pycell_new() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|_py| {
+            let h = vec![
+                vec![10.0, 0.0, 0.0],
+                vec![0.0, 10.0, 0.0],
+                vec![0.0, 0.0, 10.0],
+            ];
+            let cell = PyCell::new(h, None).unwrap();
+            assert_eq!(cell.inner.h()[(0, 0)], 10.0);
+        });
+    }
+
+    #[test]
+    fn test_build_neighborlists_simple() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions_vec = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+            let positions = numpy::PyArray1::from_vec(py, positions_vec)
+                .reshape((2, 3))
+                .unwrap();
+            let cutoff = 1.5;
+
+            let res = build_neighborlists(py, None, positions.readonly(), cutoff, false).unwrap();
+
+            let edge_index = res
+                .get_item("edge_index")
+                .unwrap()
+                .unwrap()
+                .extract::<numpy::PyReadonlyArray2<i64>>()
+                .unwrap();
+            let _shift = res
+                .get_item("shift")
+                .unwrap()
+                .unwrap()
+                .extract::<numpy::PyReadonlyArray2<i32>>()
+                .unwrap();
+
+            let edges = edge_index.as_array();
+            // Should have 1 edge: 0->1 (half list, i < j)
+            assert_eq!(edges.shape()[1], 1);
+        });
+    }
+
+    #[test]
+    fn test_build_neighborlists_multi() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions_vec = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+            let positions = numpy::PyArray1::from_vec(py, positions_vec)
+                .reshape((2, 3))
+                .unwrap();
+            let cutoffs = vec![0.5, 1.5]; // 0.5 too small, 1.5 enough
+
+            let res =
+                build_neighborlists_multi(py, None, positions.readonly(), cutoffs, None, false)
+                    .unwrap();
+
+            let res0 = res.get_item(0).unwrap().unwrap(); // Cutoff 0.5
+            let ei0 = res0
+                .get_item("edge_index")
+                .unwrap()
+                .extract::<numpy::PyReadonlyArray2<i64>>()
+                .unwrap();
+            assert_eq!(ei0.as_array().shape()[1], 0);
+
+            let res1 = res.get_item(1).unwrap().unwrap(); // Cutoff 1.5
+            let ei1 = res1
+                .get_item("edge_index")
+                .unwrap()
+                .extract::<numpy::PyReadonlyArray2<i64>>()
+                .unwrap();
+            assert_eq!(ei1.as_array().shape()[1], 1);
+        });
+    }
+
+    #[test]
+    fn test_build_neighborlists_batch() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions_vec = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 10.0, 10.0, 10.0];
+            let positions = numpy::PyArray1::from_vec(py, positions_vec)
+                .reshape((3, 3))
+                .unwrap();
+            let batch = numpy::PyArray1::from_vec(py, vec![0, 0, 1]);
+            let cutoff = 1.5;
+
+            let res = build_neighborlists_batch(
+                py,
+                positions.readonly(),
+                batch.readonly(),
+                None,
+                cutoff,
+                false,
+            )
+            .unwrap();
+
+            let edge_index = res
+                .get_item("edge_index")
+                .unwrap()
+                .unwrap()
+                .extract::<numpy::PyReadonlyArray2<i64>>()
+                .unwrap();
+            // System 0: (0,1) -> 1 edge. System 1: isolated -> 0 edges. Total 1.
+            assert_eq!(edge_index.as_array().shape()[1], 1);
+        });
+    }
+
+    #[test]
+    fn test_pycell_methods() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|_py| {
+            let h = vec![
+                vec![10.0, 0.0, 0.0],
+                vec![0.0, 10.0, 0.0],
+                vec![0.0, 0.0, 10.0],
+            ];
+            let cell = PyCell::new(h, None).unwrap();
+
+            // test wrap
+            let p = [15.0, 2.0, -1.0];
+            let wrapped = cell.wrap(p);
+            assert_eq!(wrapped, [5.0, 2.0, 9.0]);
+
+            // test repr
+            let r = cell.__repr__();
+            assert!(r.contains("PyCell"));
+            assert!(r.contains("pbc=[true, true, true]"));
+        });
+    }
+
+    #[test]
+    fn test_python_api_errors() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions = numpy::PyArray2::<f64>::zeros(py, [1, 3], false);
+
+            // Invalid cutoff
+            let res = build_neighborlists(py, None, positions.readonly(), -1.0, false);
+            assert!(res.is_err());
+
+            // Non-monotonic batch
+            let batch = numpy::PyArray1::from_vec(py, vec![1, 0]);
+            let pos2 = numpy::PyArray2::<f64>::zeros(py, [2, 3], false);
+            let res_batch =
+                build_neighborlists_batch(py, pos2.readonly(), batch.readonly(), None, 1.0, false);
+            assert!(res_batch.is_err());
+        });
+    }
+
+    #[test]
+    fn test_global_configs() {
+        pyo3::prepare_freethreaded_python();
+        let _ = set_num_threads(2);
+        assert!(get_num_threads() > 0);
+
+        init_logging(Some("debug".to_string()));
+
+        set_brute_force_threshold(500);
+        assert_eq!(get_brute_force_threshold(), 500);
+
+        set_parallel_threshold(100);
+        assert_eq!(get_parallel_threshold(), 100);
+
+        set_stack_threshold(400);
+        assert_eq!(get_stack_threshold(), 400);
+    }
+
+    #[test]
+    fn test_ase_integration_basic() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            // Create a simple ASE atoms object
+            let ase = py.import("ase").unwrap();
+            let atoms_cls = ase.getattr("Atoms").unwrap();
+
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("symbols", "H2").unwrap();
+            let pos = vec![vec![0.0, 0.0, 0.0], vec![1.0, 0.0, 0.0]];
+            kwargs.set_item("positions", pos).unwrap();
+
+            let atoms = atoms_cls.call((), Some(&kwargs)).unwrap();
+
+            let res = build_from_ase(py, &atoms, 1.5).unwrap();
+            let ei = res
+                .get_item("edge_index")
+                .unwrap()
+                .unwrap()
+                .extract::<numpy::PyReadonlyArray2<i64>>()
+                .unwrap();
+            assert_eq!(ei.as_array().shape()[1], 1);
+        });
+    }
+
+    #[test]
+    fn test_build_neighborlists_batch_multi() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions_vec = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 10.0, 10.0, 10.0];
+            let positions = numpy::PyArray1::from_vec(py, positions_vec)
+                .reshape((3, 3))
+                .unwrap();
+            let batch = numpy::PyArray1::from_vec(py, vec![0, 0, 1]);
+            let cutoffs = vec![0.5, 1.5];
+
+            let res = build_neighborlists_batch_multi(
+                py,
+                positions.readonly(),
+                batch.readonly(),
+                None,
+                cutoffs,
+                None,
+                false,
+            )
+            .unwrap();
+
+            let res1 = res.get_item(1).unwrap().unwrap(); // cutoff 1.5
+            let ei1 = res1
+                .get_item("edge_index")
+                .unwrap()
+                .extract::<numpy::PyReadonlyArray2<i64>>()
+                .unwrap();
+            assert_eq!(ei1.as_array().shape()[1], 1);
+        });
+    }
+
+    #[test]
+    fn test_build_neighborlists_batch_multi_disjoint() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions_vec = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 2.1, 0.0, 0.0];
+            let positions = numpy::PyArray1::from_vec(py, positions_vec)
+                .reshape((3, 3))
+                .unwrap();
+            let batch = numpy::PyArray1::from_vec(py, vec![0, 0, 0]);
+            let cutoffs = vec![1.5, 3.0];
+            let labels = vec!["short".to_string(), "long".to_string()];
+
+            // disjoint = true
+            let res = build_neighborlists_batch_multi(
+                py,
+                positions.readonly(),
+                batch.readonly(),
+                None,
+                cutoffs,
+                Some(labels),
+                true,
+            )
+            .unwrap();
+
+            let short = res.get_item("short").unwrap().unwrap();
+            // Edges (0,1), (1,2). Total 2 (half list).
+            assert_eq!(
+                short
+                    .get_item("edge_index")
+                    .unwrap()
+                    .extract::<numpy::PyReadonlyArray2<i64>>()
+                    .unwrap()
+                    .as_array()
+                    .shape()[1],
+                2
+            );
+
+            let long = res.get_item("long").unwrap().unwrap();
+            // Edge (0,2) only. Total 1.
+            assert_eq!(
+                long.get_item("edge_index")
+                    .unwrap()
+                    .extract::<numpy::PyReadonlyArray2<i64>>()
+                    .unwrap()
+                    .as_array()
+                    .shape()[1],
+                1
+            );
+        });
+    }
+
+    #[test]
+    fn test_batch_with_zero_cells() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions = numpy::PyArray2::<f64>::zeros(py, [2, 3], false);
+            let batch = numpy::PyArray1::from_vec(py, vec![0, 1]);
+            let cells = numpy::PyArray3::<f64>::zeros(py, [2, 3, 3], false);
+
+            let res = build_neighborlists_batch(
+                py,
+                positions.readonly(),
+                batch.readonly(),
+                Some(cells.readonly()),
+                1.0,
+                false,
+            )
+            .unwrap();
+            assert!(
+                res.get_item("edge_index")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<numpy::PyReadonlyArray2<i64>>()
+                    .unwrap()
+                    .as_array()
+                    .is_empty()
+            );
+        });
+    }
+
+    #[test]
+    fn test_build_neighborlists_multi_labels() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let pos_vec = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+            let positions = numpy::PyArray1::from_vec(py, pos_vec)
+                .reshape((2, 3))
+                .unwrap();
+            let cutoffs = vec![0.5, 1.5];
+            let labels = vec!["a".to_string(), "b".to_string()];
+
+            let res = build_neighborlists_multi(
+                py,
+                None,
+                positions.readonly(),
+                cutoffs,
+                Some(labels),
+                false,
+            )
+            .unwrap();
+            assert!(res.contains("a").unwrap());
+            assert!(res.contains("b").unwrap());
+        });
+    }
+
+    #[test]
+    fn test_extract_ase_data_isolated() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let ase = py.import("ase").unwrap();
+            let atoms_cls = ase.getattr("Atoms").unwrap();
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("symbols", "H").unwrap();
+            kwargs
+                .set_item("positions", vec![vec![0.0, 0.0, 0.0]])
+                .unwrap();
+            kwargs.set_item("pbc", vec![false, false, false]).unwrap();
+            let atoms = atoms_cls.call((), Some(&kwargs)).unwrap();
+
+            let (pos, cell) = extract_ase_data(&atoms).unwrap();
+            assert_eq!(pos.shape(), [1, 3]);
+            assert!(cell.is_none());
         });
     }
 }

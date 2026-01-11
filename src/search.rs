@@ -1761,417 +1761,204 @@ mod tests {
         use proptest::prelude::*;
 
         proptest! {
-            #[test]
-            fn test_search_correctness(
-                box_size in 10.0..20.0,
-                cutoff in 1.0..3.0,
-                positions_data in prop::collection::vec(prop::collection::vec(0.0..20.0, 3), 2..50)
-            ) {
-                let h = Matrix3::identity() * box_size;
-                let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
+        #[test]
+        fn test_search_correctness(
+            box_size in 10.0..20.0,
+            cutoff in 1.0..3.0,
+            positions_data in prop::collection::vec(prop::collection::vec(0.0..20.0, 3), 2..50)
+        ) {
+            let h = Matrix3::identity() * box_size;
+            let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
-                let mut positions = Vec::new();
-                for p in positions_data {
-                    positions.push(Vector3::new(
-                        p[0] % box_size,
-                        p[1] % box_size,
-                        p[2] % box_size,
-                    ));
-                }
-
-                let expected = brute_force_search(&cell, &positions, cutoff);
-                let cl = CellList::build(&cell, &positions, cutoff);
-                let mut result: Vec<(usize, usize)> = cl.search(&cell, &positions, cutoff).into_iter().map(|(i, j, _, _, _)| (i, j)).collect();
-
-                let mut expected_sorted = expected.clone();
-                expected_sorted.sort();
-                result.sort();
-
-                assert_eq!(result, expected_sorted);
+            let mut positions = Vec::new();
+            for p in positions_data {
+                positions.push(Vector3::new(
+                    p[0] % box_size,
+                    p[1] % box_size,
+                    p[2] % box_size,
+                ));
             }
 
-                #[test]
+            let expected = brute_force_search(&cell, &positions, cutoff);
+            let cl = CellList::build(&cell, &positions, cutoff);
+            let mut result: Vec<(usize, usize)> = cl.search(&cell, &positions, cutoff).into_iter().map(|(i, j, _, _, _)| (i, j)).collect();
 
-                fn test_brute_force_isolated_correctness(
+            let mut expected_sorted = expected.clone();
+            expected_sorted.sort();
+            result.sort();
 
-                            cutoff in 1.0..5.0,
+            assert_eq!(result, expected_sorted);
+        }
 
-                            positions_data in prop::collection::vec(prop::collection::vec(-10.0..10.0, 3), 2..100)
+            #[test]
 
-                        ) {
+            fn test_brute_force_isolated_correctness(
 
-                            let positions: Vec<Vector3<f64>> = positions_data.into_iter().map(|p| Vector3::new(p[0], p[1], p[2])).collect();
+                        cutoff in 1.0..5.0,
 
-            
+                        positions_data in prop::collection::vec(prop::collection::vec(-10.0..10.0, 3), 2..100)
 
-                            // Create a cell large enough that no PBC image can ever be within cutoff
+                    ) {
 
-                            let h = Matrix3::identity() * 1000.0;
+                        let positions: Vec<Vector3<f64>> = positions_data.into_iter().map(|p| Vector3::new(p[0], p[1], p[2])).collect();
 
-                            let cell = Cell::new(h, Vector3::new(false, false, false)).unwrap();
 
-            
 
-                            // Reference: simple O(N^2) without any Cell logic
+                        // Create a cell large enough that no PBC image can ever be within cutoff
 
-                            let mut expected = Vec::new();
+                        let h = Matrix3::identity() * 1000.0;
 
-                            for i in 0..positions.len() {
+                        let cell = Cell::new(h, Vector3::new(false, false, false)).unwrap();
 
-                                for j in (i+1)..positions.len() {
 
-                                    let dist = (positions[i] - positions[j]).norm();
 
-                                    if dist < cutoff {
+                        // Reference: simple O(N^2) without any Cell logic
 
-                                        expected.push((i as i64, j as i64));
+                        let mut expected = Vec::new();
 
-                                    }
+                        for i in 0..positions.len() {
+
+                            for j in (i+1)..positions.len() {
+
+                                let dist = (positions[i] - positions[j]).norm();
+
+                                if dist < cutoff {
+
+                                    expected.push((i as i64, j as i64));
 
                                 }
 
                             }
 
-                            expected.sort();
+                        }
 
-            
+                        expected.sort();
 
-                            let (ei, ej, shifts) = brute_force_search_full(&cell, &positions, cutoff);
 
-                            let mut results: Vec<(i64, i64)> = ei.into_iter().zip(ej.into_iter()).collect();
 
-                            results.sort();
+                        let (ei, ej, shifts) = brute_force_search_full(&cell, &positions, cutoff);
 
-            
+                        let mut results: Vec<(i64, i64)> = ei.into_iter().zip(ej.into_iter()).collect();
 
-                            assert_eq!(results, expected);
+                        results.sort();
 
-                            for s in shifts {
 
-                                assert_eq!(s, 0, "Shift must be zero for isolated system");
 
-                            }
+                        assert_eq!(results, expected);
+
+                        for s in shifts {
+
+                            assert_eq!(s, 0, "Shift must be zero for isolated system");
 
                         }
 
                     }
 
                 }
+    }
 
-            
+    #[test]
 
-                    #[test]
+    fn test_large_search_radius() {
+        // Trigger OffsetList heap allocation (n_search > 16 approx, here > 7 for +/-)
 
-            
+        let h = Matrix3::identity() * 1.0;
 
-                    fn test_large_search_radius() {
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
-            
+        let positions = vec![Vector3::new(0.5, 0.5, 0.5)];
 
-                        // Trigger OffsetList heap allocation (n_search > 16 approx, here > 7 for +/-)
+        // Cutoff 10.0. Box 1.0. n_search = 10. Total 21^3 items? No, OffsetList is 1D. 2*10+1 = 21 items.
 
-            
+        // 21 > 16. Heap path.
 
-                        let h = Matrix3::identity() * 1.0;
+        let cutoff = 10.0;
 
-            
+        let cl = CellList::build(&cell, &positions, cutoff);
 
-                        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
+        let neighbors = cl.search(&cell, &positions, cutoff);
 
-            
+        assert!(!neighbors.is_empty());
+    }
 
-                        let positions = vec![Vector3::new(0.5, 0.5, 0.5)];
+    #[test]
 
-            
+    fn test_dense_bins_simd() {
+        // Put > 4 atoms in one bin to trigger SIMD loop
 
-                
+        let h = Matrix3::identity() * 10.0;
 
-            
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
-                        // Cutoff 10.0. Box 1.0. n_search = 10. Total 21^3 items? No, OffsetList is 1D. 2*10+1 = 21 items.
+        let mut positions = Vec::new();
 
-            
+        // 5 atoms in [0,0,0]
 
-                        // 21 > 16. Heap path.
+        for i in 0..5 {
+            positions.push(Vector3::new(0.1 * i as f64, 0.1, 0.1));
+        }
 
-            
+        let cutoff = 2.0;
 
-                        let cutoff = 10.0;
+        let cl = CellList::build(&cell, &positions, cutoff);
 
-            
+        let (ei, _, _) = cl.par_search_optimized(&cell, cutoff);
 
-                        let cl = CellList::build(&cell, &positions, cutoff);
+        // 5 atoms all neighbors of each other. 5 * 4 / 2 = 10 unique pairs (i < j).
 
-            
+        assert_eq!(ei.len(), 10);
+    }
 
-                        let neighbors = cl.search(&cell, &positions, cutoff);
+    #[test]
 
-            
+    fn test_empty_bins_skipping() {
+        // Create a system with empty bins to hit "start_j == end_j" check
 
-                        assert!(!neighbors.is_empty());
+        let h = Matrix3::identity() * 10.0;
 
-            
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
-                    }
+        let positions = vec![
+            Vector3::new(0.5, 0.5, 0.5), // Bin 0
+            Vector3::new(9.5, 9.5, 9.5), // Bin N
+        ];
 
-            
+        // Cutoff small enough so bins between are empty
 
-                
+        let cutoff = 1.0;
 
-            
+        let cl = CellList::build(&cell, &positions, cutoff);
 
-                        #[test]
+        // Run search
 
-            
+        cl.par_search_optimized(&cell, cutoff);
 
-                
+        // Also run count only
 
-            
+        let _ = cl.count_atom_neighbors(0, &cell, cutoff * cutoff);
+    }
 
-                        fn test_dense_bins_simd() {
+    #[test]
 
-            
+    fn test_brute_force_heap_allocation() {
+        // Default stack threshold is 1000.
 
-                
+        // We set it to 0 to force heap allocation.
 
-            
+        let old = config::get_stack_threshold();
 
-                            // Put > 4 atoms in one bin to trigger SIMD loop
+        config::set_stack_threshold(0);
 
-            
+        let h = Matrix3::identity() * 10.0;
 
-                
+        let _cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
 
-            
+        let positions = vec![Vector3::new(1.0, 1.0, 1.0), Vector3::new(2.0, 2.0, 2.0)];
 
-                            let h = Matrix3::identity() * 10.0;
+        let (ei, _, _) = brute_force_search_simd(&positions, 2.0);
 
-            
+        assert_eq!(ei.len(), 1);
 
-                
-
-            
-
-                            let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
-
-            
-
-                
-
-            
-
-                            let mut positions = Vec::new();
-
-            
-
-                
-
-            
-
-                            // 5 atoms in [0,0,0]
-
-            
-
-                
-
-            
-
-                            for i in 0..5 {
-
-            
-
-                
-
-            
-
-                                positions.push(Vector3::new(0.1 * i as f64, 0.1, 0.1));
-
-            
-
-                
-
-            
-
-                            }
-
-            
-
-                
-
-            
-
-                            let cutoff = 2.0;
-
-            
-
-                
-
-            
-
-                            let cl = CellList::build(&cell, &positions, cutoff);
-
-            
-
-                
-
-            
-
-                            let (ei, _, _) = cl.par_search_optimized(&cell, cutoff);
-
-            
-
-                
-
-            
-
-                            // 5 atoms all neighbors of each other. 5 * 4 / 2 = 10 unique pairs (i < j).
-
-            
-
-                
-
-            
-
-                            assert_eq!(ei.len(), 10);
-
-            
-
-                
-
-            
-
-                        }
-
-            
-
-                
-
-            
-
-                    
-
-            
-
-                
-
-            
-
-                    #[test]
-
-            
-
-                    fn test_empty_bins_skipping() {
-
-            
-
-                        // Create a system with empty bins to hit "start_j == end_j" check
-
-            
-
-                        let h = Matrix3::identity() * 10.0;
-
-            
-
-                        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
-
-            
-
-                        let positions = vec![
-
-            
-
-                            Vector3::new(0.5, 0.5, 0.5), // Bin 0
-
-            
-
-                            Vector3::new(9.5, 9.5, 9.5), // Bin N
-
-            
-
-                        ];
-
-            
-
-                        // Cutoff small enough so bins between are empty
-
-            
-
-                        let cutoff = 1.0;
-
-            
-
-                        let cl = CellList::build(&cell, &positions, cutoff);
-
-            
-
-                        // Run search
-
-            
-
-                        cl.par_search_optimized(&cell, cutoff);
-
-            
-
-                        // Also run count only
-
-            
-
-                        let _ = cl.count_atom_neighbors(0, &cell, cutoff * cutoff);
-
-            
-
-                    }
-
-            
-
-                
-
-            
-
-                    #[test]
-
-            
-
-                    fn test_brute_force_heap_allocation() {
-
-            
-
-                
-
-                    // Default stack threshold is 1000.
-
-                    // We set it to 0 to force heap allocation.
-
-                    let old = config::get_stack_threshold();
-
-                    config::set_stack_threshold(0);
-
-            
-
-                    let h = Matrix3::identity() * 10.0;
-
-                    let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
-
-                    let positions = vec![
-
-                        Vector3::new(1.0, 1.0, 1.0),
-
-                        Vector3::new(2.0, 2.0, 2.0),
-
-                    ];
-
-            
-
-                    let (ei, _, _) = brute_force_search_simd(&positions, 2.0);
-
-                    assert_eq!(ei.len(), 1);
-
-            
-
-                    config::set_stack_threshold(old);
-
-                }
-
-            }
-
-            
+        config::set_stack_threshold(old);
+    }
+}

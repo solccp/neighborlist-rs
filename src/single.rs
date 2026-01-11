@@ -266,10 +266,7 @@ mod tests {
         // Force CellList by violating MIC (cutoff * 2 > box)
         let h = Matrix3::identity() * 10.0;
         let cell = Some((h, Vector3::new(true, true, true)));
-        let positions = vec![
-            Vector3::new(1.0, 1.0, 1.0),
-            Vector3::new(2.0, 2.0, 2.0),
-        ];
+        let positions = vec![Vector3::new(1.0, 1.0, 1.0), Vector3::new(2.0, 2.0, 2.0)];
         // Parallel false -> Serial CellList path
         let (ei, _, _) = search_single(&positions, cell, 6.0, false).unwrap();
         assert_eq!(ei.len(), 1);
@@ -280,10 +277,7 @@ mod tests {
         // Force CellList in multi by violating MIC
         let h = Matrix3::identity() * 10.0;
         let cell = Some((h, Vector3::new(true, true, true)));
-        let positions = vec![
-            Vector3::new(1.0, 1.0, 1.0),
-            Vector3::new(2.0, 2.0, 2.0),
-        ];
+        let positions = vec![Vector3::new(1.0, 1.0, 1.0), Vector3::new(2.0, 2.0, 2.0)];
         let cutoffs = vec![6.0];
         let results = search_single_multi(&positions, cell, &cutoffs, false).unwrap();
         assert_eq!(results[0].0.len(), 1);

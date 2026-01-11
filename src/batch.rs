@@ -517,10 +517,7 @@ mod tests {
         // Parallel = false
         let h = Matrix3::identity() * 10.0;
         let cell = Some((h, Vector3::new(true, true, true)));
-        let positions = vec![
-            Vector3::new(1.0, 1.0, 1.0),
-            Vector3::new(2.0, 2.0, 2.0),
-        ];
+        let positions = vec![Vector3::new(1.0, 1.0, 1.0), Vector3::new(2.0, 2.0, 2.0)];
         let batch = vec![0, 0];
         let cells = vec![cell];
 
@@ -542,8 +539,8 @@ mod tests {
         let mut positions = Vec::new();
         let mut batch = Vec::new();
         for i in 0..305 {
-             positions.push(Vector3::new(i as f64 * 0.1, 0.0, 0.0));
-             batch.push(0);
+            positions.push(Vector3::new(i as f64 * 0.1, 0.0, 0.0));
+            batch.push(0);
         }
         let cells = vec![cell];
 
@@ -557,10 +554,7 @@ mod tests {
         // Force CellList in multi search by violating MIC
         let h = Matrix3::identity() * 10.0;
         let cell = Some((h, Vector3::new(true, true, true)));
-        let positions = vec![
-            Vector3::new(1.0, 1.0, 1.0),
-            Vector3::new(2.0, 2.0, 2.0),
-        ];
+        let positions = vec![Vector3::new(1.0, 1.0, 1.0), Vector3::new(2.0, 2.0, 2.0)];
         let batch = vec![0, 0];
         let cells = vec![cell];
         let cutoffs = vec![6.0]; // Violates MIC

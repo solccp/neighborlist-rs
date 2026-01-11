@@ -18,5 +18,5 @@
 ## Phase 4: Integration & Documentation
 - [x] Task: Re-export the public API at the crate root in `src/lib.rs`.
 - [x] Task: Update `PYTHON_API.md` or add a `RUST_API.md` (if appropriate) to document usage.
-- [~] Task: Final verification of Python bindings to ensure no regressions.
+- [x] Task: Final verification of Python bindings to ensure no regressions.
 - [ ] Task: Conductor - User Manual Verification 'Phase 4: Integration & Documentation' (Protocol in workflow.md)

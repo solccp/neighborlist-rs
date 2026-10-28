@@ -27,8 +27,10 @@ impl PyCell {
                 "Cell matrix must be 3x3",
             ));
         }
+        // Rows of `h` are the lattice vectors (ASE convention); internally
+        // they are the columns of H.
         let h_mat = Matrix3::new(
-            h[0][0], h[0][1], h[0][2], h[1][0], h[1][1], h[1][2], h[2][0], h[2][1], h[2][2],
+            h[0][0], h[1][0], h[2][0], h[0][1], h[1][1], h[2][1], h[0][2], h[1][2], h[2][2],
         );
         let pbc_vec = if let Some(p) = pbc {
             Vector3::new(p[0], p[1], p[2])
@@ -52,13 +54,13 @@ impl PyCell {
         format!(
             "PyCell(h=[[{}, {}, {}], [{}, {}, {}], [{}, {}, {}]], pbc=[{}, {}, {}])",
             h[(0, 0)],
-            h[(0, 1)],
-            h[(0, 2)],
             h[(1, 0)],
-            h[(1, 1)],
-            h[(1, 2)],
             h[(2, 0)],
+            h[(0, 1)],
+            h[(1, 1)],
             h[(2, 1)],
+            h[(0, 2)],
+            h[(1, 2)],
             h[(2, 2)],
             p.x,
             p.y,
@@ -80,7 +82,7 @@ impl PyCell {
         let pbc: [bool; 3] = pbc_obj.extract()?;
         let pbc_vec = Vector3::new(pbc[0], pbc[1], pbc[2]);
 
-        // Transpose ASE (row-major) to internal (column-major)
+        // Rows (ASE layout) become the columns of the internal H.
         let h_mat = Matrix3::new(
             c[[0, 0]],
             c[[1, 0]],
@@ -386,7 +388,7 @@ fn build_neighborlists_batch<'py>(
             if is_zero_matrix(&m) {
                 mats.push(None);
             } else {
-                // Transpose ASE (row-major) to internal (column-major)
+                // Rows (ASE layout) become the columns of the internal H.
                 let h_mat = Matrix3::new(
                     m[[0, 0]],
                     m[[1, 0]],
@@ -495,7 +497,7 @@ fn build_neighborlists_batch_multi<'py>(
             if is_zero_matrix(&m) {
                 mats.push(None);
             } else {
-                // Transpose ASE (row-major) to internal (column-major)
+                // Rows (ASE layout) become the columns of the internal H.
                 let h_mat = Matrix3::new(
                     m[[0, 0]],
                     m[[1, 0]],

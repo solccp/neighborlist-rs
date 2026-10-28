@@ -17,6 +17,11 @@ pub struct NeighborList {
 }
 
 /// Build neighbor lists for a single system.
+///
+/// `cell` is `(h, pbc)`, where the **rows** `h[0]`, `h[1]`, `h[2]` are the
+/// lattice vectors a, b, c, as in ASE's `atoms.cell`. Each edge `(i, j)` with
+/// shift `S` is the displacement `r_ij = x_j - x_i + S · h` (S as a row
+/// vector). The list is a half list: each pair appears once.
 pub fn build_neighborlists(
     positions: &[[f64; 3]],
     cutoff: f64,
@@ -37,9 +42,12 @@ pub fn build_neighborlists(
     })
 }
 
-/// Build neighbor lists for a batch of systems.
 type CellInfo = ([[f64; 3]; 3], [bool; 3]);
 
+/// Build neighbor lists for a batch of systems.
+///
+/// Each cell uses the same convention as [`build_neighborlists`]: lattice
+/// vectors as the **rows** of `h`, and `r_ij = x_j - x_i + S · h`.
 pub fn build_neighborlists_batch(
     positions: &[[f64; 3]],
     batch: &[i32],
@@ -90,10 +98,12 @@ fn convert_positions(positions: &[[f64; 3]]) -> Vec<Vector3<f64>> {
         .collect()
 }
 
+/// Rows of `cell` are the lattice vectors (ASE convention); internally they
+/// are the columns of H.
 fn convert_cell(cell: &[[f64; 3]; 3]) -> Matrix3<f64> {
     Matrix3::new(
-        cell[0][0], cell[0][1], cell[0][2], cell[1][0], cell[1][1], cell[1][2], cell[2][0],
-        cell[2][1], cell[2][2],
+        cell[0][0], cell[1][0], cell[2][0], cell[0][1], cell[1][1], cell[2][1], cell[0][2],
+        cell[1][2], cell[2][2],
     )
 }
 

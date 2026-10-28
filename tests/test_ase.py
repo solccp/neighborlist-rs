@@ -51,10 +51,8 @@ def test_ase_pbc_true():
     np.testing.assert_array_equal(shifts[0], [-1, 0, 0])
 
     # Check against explicit PyCell call
-    # PyCell expects columns as vectors. ASE cell is [[ax, ay, az], [bx, by, bz], [cx, cy, cz]]
-    # So we MUST transpose ASE cell for PyCell.
-    h_T = atoms.get_cell().T.tolist()
-    cell = neighborlist_rs.PyCell(h_T)
+    # PyCell takes lattice vectors as rows, exactly like ASE's cell.
+    cell = neighborlist_rs.PyCell(atoms.get_cell().tolist())
     res_manual = neighborlist_rs.build_neighborlists(
         cell, atoms.get_positions(), cutoff
     )

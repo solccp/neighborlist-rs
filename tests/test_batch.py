@@ -79,10 +79,7 @@ def test_build_neighborlists_batch_multi_pbc():
     batch = np.array([0] * len(pos1) + [1] * len(pos2), dtype=np.int32)
 
     # Cells: (2, 3, 3)
-    # Note: neighborlist-rs PyCell takes transposed ase cell (column major)
-    # But build_neighborlists_batch takes the 3x3 as-is from numpy if we matched single call.
-    # Actually PyCell code: h[0][0], h[0][1]... so it expects row-major input which it converts to Matrix3.
-    # Our batch extraction logic: m[[0,0]], m[[0,1]]... also row-major.
+    # PyCell and the batch cells both take lattice vectors as rows (ASE).
     cells = np.zeros((2, 3, 3))
     cells[0] = atoms1.get_cell()[:]  # ase cell is row-major [[ax, ay, az], [bx...]]
     cells[1] = np.zeros((3, 3))  # non-PBC
@@ -97,7 +94,7 @@ def test_build_neighborlists_batch_multi_pbc():
     for i, r in enumerate(cutoffs):
         # System 1 single
         res1 = neighborlist_rs.build_neighborlists(
-            neighborlist_rs.PyCell(cells[0].T.tolist()), pos1, r
+            neighborlist_rs.PyCell(cells[0].tolist()), pos1, r
         )
         # System 2 single
         res2 = neighborlist_rs.build_neighborlists(None, pos2, r)

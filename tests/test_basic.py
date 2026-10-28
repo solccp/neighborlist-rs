@@ -95,9 +95,9 @@ def test_silicon_bulk():
     # Silicon diamond structure, cubic cell
     atoms = bulk("Si", "diamond", a=5.43, cubic=True)
     pos = atoms.get_positions()
-    h_T = atoms.get_cell()[:].T.tolist()
+    h = atoms.get_cell()[:].tolist()
 
-    cell = neighborlist_rs.PyCell(h_T)
+    cell = neighborlist_rs.PyCell(h)
     # 1st neighbor distance is a * sqrt(3) / 4 = 5.43 * 0.433 = 2.35
     cutoff = 2.5
 

@@ -20,9 +20,9 @@
 ## Core Conventions
 
 ### Cell Matrix (H-matrix)
-The cell matrix $H$ is defined such that the columns are the lattice vectors $\mathbf{a}, \mathbf{b}, \mathbf{c}$:
-$$H = [\mathbf{a} | \mathbf{b} | \mathbf{c}] = \begin{bmatrix} a_x & b_x & c_x \\ a_y & b_y & c_y \\ a_z & b_z & c_z \end{bmatrix}$$
-*Note: This is the transpose of the convention used by ASE.*
+Every API takes the cell with the lattice vectors $\mathbf{a}, \mathbf{b}, \mathbf{c}$ as **rows**, the same layout as ASE's `atoms.cell`, so `PyCell(atoms.cell.tolist())` and `cells=atoms.cell.array[None]` work as-is:
+$$h = \begin{bmatrix} \mathbf{a} \\ \mathbf{b} \\ \mathbf{c} \end{bmatrix} = \begin{bmatrix} a_x & a_y & a_z \\ b_x & b_y & b_z \\ c_x & c_y & c_z \end{bmatrix}$$
+*Changed in 0.2.0:* `PyCell(h)` used to take the lattice vectors as columns. Drop any `.T` you applied to an ASE cell before passing it to `PyCell`. `build_from_ase` and the batch `cells=` argument already used rows and are unchanged.
 
 ### Result Schema
 All neighbor list results return a dictionary containing:
@@ -31,8 +31,8 @@ All neighbor list results return a dictionary containing:
 
 ### Reconstructing Vectors
 To compute the displacement vector $\mathbf{r}_{ij}$ between atoms $i$ and $j$ considering PBC:
-$$\mathbf{r}_{ij} = \mathbf{pos}_j + (S_{ij} \cdot H) - \mathbf{pos}_i$$
-Where $S_{ij}$ is the shift vector for that edge.
+$$\mathbf{r}_{ij} = \mathbf{pos}_j + S_{ij}\,h - \mathbf{pos}_i$$
+Where $S_{ij}$ is the shift vector (a row vector) for that edge, i.e. `pos[j] - pos[i] + S @ atoms.cell`.
 
 ---
 

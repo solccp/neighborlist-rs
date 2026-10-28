@@ -84,8 +84,8 @@ def run_benchmarks():
             if np.all(atoms.get_cell() == 0):
                 cell_rs = None
             else:
-                h_T = atoms.get_cell()[:].T.tolist()
-                cell_rs = neighborlist_rs.PyCell(h_T)
+                h = atoms.get_cell()[:].tolist()
+                cell_rs = neighborlist_rs.PyCell(h)
 
             res_rs = neighborlist_rs.build_neighborlists(
                 cell_rs, pos, cutoff, parallel=True

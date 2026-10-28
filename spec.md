@@ -81,7 +81,7 @@ Key capabilities:
 ### 3.2 Coordinate Conventions
 - **Positions**: Cartesian coordinates in Å (preferred).
 - **Cell Matrix (`H`)**: Shape (3, 3).
-  - Convention: Column vectors `a, b, c` as columns of `H`.
+  - Convention: lattice vectors `a, b, c` as the rows of `H` (ASE layout); `r_ij = x_j - x_i + S · H`.
 
 ### 3.3 Neighborlist Types
 The library must support producing multiple lists in a single traversal:

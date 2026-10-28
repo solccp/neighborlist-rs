@@ -41,7 +41,7 @@ def run_baseline():
         print(f"Benchmarking {n_atoms} atoms...")
         atoms = generate_ethanol_system(n_atoms)
         pos = atoms.get_positions()
-        h_T = atoms.get_cell()[:].T.tolist()
+        h = atoms.get_cell()[:].tolist()
 
         results[str(n_atoms)] = {}
 
@@ -49,7 +49,7 @@ def run_baseline():
             print(f"  Cutoff {cutoff}...")
             times = []
             for _ in range(n_repeat):
-                cell = neighborlist_rs.PyCell(h_T)
+                cell = neighborlist_rs.PyCell(h)
                 start = time.perf_counter()
                 neighborlist_rs.build_neighborlists(cell, pos, cutoff, parallel=True)
                 end = time.perf_counter()

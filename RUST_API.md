@@ -11,6 +11,19 @@ To use `neighborlist-rs` in your Rust project, add it as a dependency in your `C
 neighborlist-rs = { git = "https://github.com/your-repo/neighborlist-rs.git" }
 ```
 
+### Cell and Shift Conventions
+The cell `h: [[f64; 3]; 3]` passed as `Some((&h, pbc))` holds the lattice vectors $\mathbf{a}, \mathbf{b}, \mathbf{c}$ as its **rows**, the same layout as ASE's `atoms.cell` (and pymatgen, torch-sim, nvalchemiops):
+
+$$h = \begin{bmatrix} \mathbf{a} \\ \mathbf{b} \\ \mathbf{c} \end{bmatrix} = \begin{bmatrix} a_x & a_y & a_z \\ b_x & b_y & b_z \\ c_x & c_y & c_z \end{bmatrix}$$
+
+Each edge `(i, j)` with integer shift `S` (a row vector) stands for the displacement
+
+$$\mathbf{r}_{ij} = \mathbf{x}_j - \mathbf{x}_i + S\,h$$
+
+i.e. `x_j - x_i + S @ atoms.cell`. The same applies to every cell in `build_neighborlists_batch`.
+
+*Changed in 0.2.0:* earlier versions took the lattice vectors as the **columns** of `h`. Callers that passed a transposed cell (`atoms.cell.T`) must drop the transpose. Orthogonal and symmetric cells look the same either way, so the difference only shows up on oblique cells, such as fcc(111) slabs.
+
 ### Single System Search
 
 ```rust

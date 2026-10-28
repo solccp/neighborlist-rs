@@ -41,8 +41,8 @@ def test_batched_pbc():
     print(f"Non-zero shifts: {np.any(result_batch['shift'] != 0, axis=1).sum()}")
 
     # Compare with single-system API (should work correctly)
-    # Note: PyCell expects column-major (transposed) cell matrix
-    pycell = PyCell(cells[0].T.tolist())
+    # PyCell takes lattice vectors as rows, like the batch cells.
+    pycell = PyCell(cells[0].tolist())
     result_single = build_neighborlists(cell=pycell, positions=positions, cutoff=cutoff)
 
     print("\n" + "=" * 60)

@@ -59,11 +59,11 @@ def generate_ethanol_system(target_n_atoms, density=1.0):
 
 atoms = generate_ethanol_system({n_atoms})
 pos = atoms.get_positions()
-h_T = atoms.get_cell()[:].T.tolist()
+h = atoms.get_cell()[:].tolist()
 
 times = []
 for _ in range({n_repeat}):
-    cell = neighborlist_rs.PyCell(h_T)
+    cell = neighborlist_rs.PyCell(h)
     start = time.perf_counter()
     neighborlist_rs.build_neighborlists(cell, pos, {cutoff}, parallel=True)
     end = time.perf_counter()

@@ -28,11 +28,11 @@ def profile():
     n_atoms = 10000
     atoms = generate_ethanol_system(n_atoms)
     pos = atoms.get_positions()
-    h_T = atoms.get_cell()[:].T.tolist()
+    h = atoms.get_cell()[:].tolist()
     cutoff = 6.0
 
     print(f"Profiling {n_atoms} atoms at cutoff {cutoff}...")
-    cell = neighborlist_rs.PyCell(h_T)
+    cell = neighborlist_rs.PyCell(h)
     # This should trigger tracing output to stdout
     neighborlist_rs.build_neighborlists(cell, pos, cutoff, parallel=True)
 

@@ -514,7 +514,10 @@ impl CellList {
                     }
 
                     let offset_vec = ox + oy + oz;
-                    let is_shifted = *sx != 0 || *sy != 0 || *sz != 0;
+                    // For i == j the atom shifts cancel, so (sx, sy, sz) is the pair's shift.
+                    // +S and -S are the same physical pair: keep only the lexicographically
+                    // positive one so the half list holds each self-image once.
+                    let keep_self = (*sx, *sy, *sz) > (0, 0, 0);
                     let ox_v = f64x4::from(offset_vec.x);
                     let oy_v = f64x4::from(offset_vec.y);
                     let oz_v = f64x4::from(offset_vec.z);
@@ -546,7 +549,7 @@ impl CellList {
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         for k in 0..4 {
                             if m_array[k] != 0
-                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && is_shifted))
+                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && keep_self))
                             {
                                 count += 1;
                             }
@@ -559,7 +562,7 @@ impl CellList {
                         if i_orig > j_orig {
                             continue;
                         }
-                        if i_orig == j_orig && !is_shifted {
+                        if i_orig == j_orig && !keep_self {
                             continue;
                         }
                         let dx = (self.pos_x[sj_tail] - pos_i_x) + offset_vec.x;
@@ -656,7 +659,10 @@ impl CellList {
                     }
 
                     let offset_vec = ox + oy + oz;
-                    let is_shifted = *sx != 0 || *sy != 0 || *sz != 0;
+                    // For i == j the atom shifts cancel, so (sx, sy, sz) is the pair's shift.
+                    // +S and -S are the same physical pair: keep only the lexicographically
+                    // positive one so the half list holds each self-image once.
+                    let keep_self = (*sx, *sy, *sz) > (0, 0, 0);
                     let ox_v = f64x4::from(offset_vec.x);
                     let oy_v = f64x4::from(offset_vec.y);
                     let oz_v = f64x4::from(offset_vec.z);
@@ -688,7 +694,7 @@ impl CellList {
                         let m_array: [u64; 4] = bytemuck::cast(mask);
                         for k in 0..4 {
                             if m_array[k] != 0
-                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && is_shifted))
+                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && keep_self))
                             {
                                 edge_i[offset] = i_orig as i64;
                                 edge_j[offset] = j_orig_v[k] as i64;
@@ -706,7 +712,7 @@ impl CellList {
                         if i_orig > j_orig {
                             continue;
                         }
-                        if i_orig == j_orig && !is_shifted {
+                        if i_orig == j_orig && !keep_self {
                             continue;
                         }
                         let dx = (self.pos_x[sj_tail] - pos_i_x) + offset_vec.x;
@@ -802,7 +808,10 @@ impl CellList {
                     }
 
                     let offset_vec = ox + oy + oz;
-                    let is_shifted = *sx != 0 || *sy != 0 || *sz != 0;
+                    // For i == j the atom shifts cancel, so (sx, sy, sz) is the pair's shift.
+                    // +S and -S are the same physical pair: keep only the lexicographically
+                    // positive one so the half list holds each self-image once.
+                    let keep_self = (*sx, *sy, *sz) > (0, 0, 0);
                     let ox_v = f64x4::from(offset_vec.x);
                     let oy_v = f64x4::from(offset_vec.y);
                     let oz_v = f64x4::from(offset_vec.z);
@@ -836,7 +845,7 @@ impl CellList {
 
                         for k in 0..4 {
                             if m_array[k] != 0
-                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && is_shifted))
+                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && keep_self))
                             {
                                 let d2 = dist_sq_array[k];
                                 for (cutoff_idx, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
@@ -857,7 +866,7 @@ impl CellList {
                         if i_orig > j_orig {
                             continue;
                         }
-                        if i_orig == j_orig && !is_shifted {
+                        if i_orig == j_orig && !keep_self {
                             continue;
                         }
                         let dx = (self.pos_x[sj_tail] - pos_i_x) + offset_vec.x;
@@ -965,7 +974,10 @@ impl CellList {
                     }
 
                     let offset_vec = ox + oy + oz;
-                    let is_shifted = *sx != 0 || *sy != 0 || *sz != 0;
+                    // For i == j the atom shifts cancel, so (sx, sy, sz) is the pair's shift.
+                    // +S and -S are the same physical pair: keep only the lexicographically
+                    // positive one so the half list holds each self-image once.
+                    let keep_self = (*sx, *sy, *sz) > (0, 0, 0);
                     let ox_v = f64x4::from(offset_vec.x);
                     let oy_v = f64x4::from(offset_vec.y);
                     let oz_v = f64x4::from(offset_vec.z);
@@ -999,7 +1011,7 @@ impl CellList {
 
                         for k in 0..4 {
                             if m_array[k] != 0
-                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && is_shifted))
+                                && (i_orig < j_orig_v[k] || (i_orig == j_orig_v[k] && keep_self))
                             {
                                 let d2 = dist_sq_array[k];
                                 for (cutoff_idx, &rc_sq) in sorted_cutoffs_sq.iter().enumerate() {
@@ -1038,7 +1050,7 @@ impl CellList {
                         if i_orig > j_orig {
                             continue;
                         }
-                        if i_orig == j_orig && !is_shifted {
+                        if i_orig == j_orig && !keep_self {
                             continue;
                         }
                         let dx = (self.pos_x[sj_tail] - pos_i_x) + offset_vec.x;
@@ -1132,14 +1144,17 @@ impl CellList {
                         continue;
                     }
 
-                    let is_shifted = sx != 0 || sy != 0 || sz != 0;
+                    // For i == j the atom shifts cancel, so (sx, sy, sz) is the pair's shift.
+                    // +S and -S are the same physical pair: keep only the lexicographically
+                    // positive one so the half list holds each self-image once.
+                    let keep_self = (sx, sy, sz) > (0, 0, 0);
 
                     for sj in start_j..end_j {
                         let j_orig = self.particles[sj];
                         if i_orig > j_orig {
                             continue;
                         }
-                        if i_orig == j_orig && !is_shifted {
+                        if i_orig == j_orig && !keep_self {
                             continue;
                         }
                         let dx = (self.pos_x[sj] - pos_i_x) + offset_vec.x;

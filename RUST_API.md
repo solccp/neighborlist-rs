@@ -88,3 +88,5 @@ fn main() -> Result<(), String> {
 
 ### Note on Directionality
 The library currently enforces `i < j` for neighbor pairs in isolated systems and unique pairs in periodic systems. This means it returns **half-neighbors** (one direction only). If your application requires both directions (undirected graph for message passing), you should double the edges and negate the shifts for the reverse direction.
+
+When the cutoff exceeds a cell length, an atom sees its own periodic images. Each self-image pair `(i, i, S)` is emitted once, with the sign chosen so that the first non-zero component of `S` is positive; `(i, i, -S)` is its implied reverse. Doubling the list as above therefore reproduces a full list (e.g. ASE's `neighbor_list`) exactly.

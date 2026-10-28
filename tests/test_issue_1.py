@@ -11,11 +11,11 @@ def test_pbc_self_interaction():
     h = [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]]
     cell = neighborlist_rs.PyCell(h, [True, True, True])
 
-    # Large cutoff: 6.0 (should capture 6 nearest images at dist 5.0)
+    # Large cutoff: 6.0 (captures the 6 nearest images at dist 5.0)
     cutoff = 6.0
 
-    # Expected: 6 neighbors (periodic images)
-    # Shifts: (+-1, 0, 0), (0, +-1, 0), (0, 0, +-1)
+    # The half list holds each self-image once: +S and -S are the same pair.
+    # Shifts: (0, 0, 1), (0, 1, 0), (1, 0, 0)
 
     results = neighborlist_rs.build_neighborlists(cell, positions, cutoff)
 
@@ -25,8 +25,8 @@ def test_pbc_self_interaction():
     print(f"Found {len(idx_i)} neighbors")
     print(f"Shifts:\n{shifts}")
 
-    # Should be 6
-    assert len(idx_i) == 6
+    assert len(idx_i) == 3
+    assert sorted(map(tuple, shifts)) == [(0, 0, 1), (0, 1, 0), (1, 0, 0)]
 
     # Verify we didn't get the self-loop (0,0,0)
     for s in shifts:

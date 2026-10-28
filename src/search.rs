@@ -32,7 +32,14 @@ impl OffsetList {
         }
     }
 
-    fn prepare(&mut self, center_bin: i32, n_search: i32, num_bins: i32, h_col: Vector3<f64>) {
+    fn prepare(
+        &mut self,
+        center_bin: i32,
+        n_search: i32,
+        num_bins: i32,
+        h_col: Vector3<f64>,
+        periodic: bool,
+    ) {
         let required = (2 * n_search + 1) as usize;
         if required > 16 {
             self.use_stack = false;
@@ -45,6 +52,10 @@ impl OffsetList {
 
         for d in -n_search..=n_search {
             let (nb, shift) = div_mod(center_bin + d, num_bins);
+            // A non-periodic axis has no images: drop bins outside the box.
+            if !periodic && shift != 0 {
+                continue;
+            }
             let vec = h_col * (shift as f64);
             let item = (nb, vec, shift);
             if self.use_stack {
@@ -153,17 +164,26 @@ impl CellList {
 
         let h_matrix = cell.h();
 
+        // Atoms are wrapped into the box only along periodic axes; along a
+        // non-periodic axis they keep their position and a zero image shift.
+        let pbc = *cell.pbc();
+        let wrap_floor = |frac: Vector3<f64>| {
+            Vector3::new(
+                if pbc.x { frac.x.floor() } else { 0.0 },
+                if pbc.y { frac.y.floor() } else { 0.0 },
+                if pbc.z { frac.z.floor() } else { 0.0 },
+            )
+        };
+
         // 4. Compute bin counts directly from atom_data
         let mut counts = vec![0; total_bins];
         for &(_z, original_idx) in &atom_data {
             let pos = positions[original_idx];
             let frac = cell.to_fractional(&pos);
-            let ux = frac.x - frac.x.floor();
-            let uy = frac.y - frac.y.floor();
-            let uz = frac.z - frac.z.floor();
-            let bx = ((ux * num_bins.x as f64) as usize).min(num_bins.x - 1);
-            let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
-            let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
+            let u = frac - wrap_floor(frac);
+            let bx = bin_index(u.x, num_bins.x) as usize;
+            let by = bin_index(u.y, num_bins.y) as usize;
+            let bz = bin_index(u.z, num_bins.z) as usize;
             let linear_idx = bx + num_bins.x * (by + num_bins.y * bz);
             let rank = bin_ranks[linear_idx];
             counts[rank] += 1;
@@ -192,24 +212,20 @@ impl CellList {
             for &(_z, original_idx) in &atom_data {
                 let pos = positions[original_idx];
                 let frac = cell.to_fractional(&pos);
-                let fx = frac.x.floor();
-                let fy = frac.y.floor();
-                let fz = frac.z.floor();
+                let f = wrap_floor(frac);
 
-                let sx = -fx as i32;
-                let sy = -fy as i32;
-                let sz = -fz as i32;
+                let sx = -f.x as i32;
+                let sy = -f.y as i32;
+                let sz = -f.z as i32;
 
                 let s_vec = h_matrix * Vector3::new(-sx as f64, -sy as f64, -sz as f64);
                 let wrapped_pos = pos - s_vec;
 
-                let ux = frac.x - fx;
-                let uy = frac.y - fy;
-                let uz = frac.z - fz;
+                let u = frac - f;
 
-                let bx = ((ux * num_bins.x as f64) as usize).min(num_bins.x - 1);
-                let by = ((uy * num_bins.y as f64) as usize).min(num_bins.y - 1);
-                let bz = ((uz * num_bins.z as f64) as usize).min(num_bins.z - 1);
+                let bx = bin_index(u.x, num_bins.x) as usize;
+                let by = bin_index(u.y, num_bins.y) as usize;
+                let bz = bin_index(u.z, num_bins.z) as usize;
 
                 let linear_idx = bx + num_bins.x * (by + num_bins.y * bz);
                 let rank = bin_ranks[linear_idx];
@@ -452,9 +468,9 @@ impl CellList {
         let h_matrix = cell.h();
 
         let frac_i = cell.to_fractional(&Vector3::new(pos_i_x, pos_i_y, pos_i_z));
-        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
-        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
-        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+        let bx = bin_index(frac_i.x, self.num_bins.x);
+        let by = bin_index(frac_i.y, self.num_bins.y);
+        let bz = bin_index(frac_i.z, self.num_bins.z);
 
         let i_orig = self.particles[i];
         let mut count = 0;
@@ -466,6 +482,7 @@ impl CellList {
             self.n_search.x,
             self.num_bins.x as i32,
             h_matrix.column(0).into(),
+            cell.pbc().x,
         );
 
         let mut sy_list = OffsetList::new();
@@ -474,6 +491,7 @@ impl CellList {
             self.n_search.y,
             self.num_bins.y as i32,
             h_matrix.column(1).into(),
+            cell.pbc().y,
         );
 
         let mut sz_list = OffsetList::new();
@@ -482,6 +500,7 @@ impl CellList {
             self.n_search.z,
             self.num_bins.z as i32,
             h_matrix.column(2).into(),
+            cell.pbc().z,
         );
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
@@ -598,9 +617,9 @@ impl CellList {
         let h_matrix = cell.h();
 
         let frac_i = cell.to_fractional(&Vector3::new(pos_i_x, pos_i_y, pos_i_z));
-        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
-        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
-        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+        let bx = bin_index(frac_i.x, self.num_bins.x);
+        let by = bin_index(frac_i.y, self.num_bins.y);
+        let bz = bin_index(frac_i.z, self.num_bins.z);
 
         let i_orig = self.particles[i];
 
@@ -611,6 +630,7 @@ impl CellList {
             self.n_search.x,
             self.num_bins.x as i32,
             h_matrix.column(0).into(),
+            cell.pbc().x,
         );
 
         let mut sy_list = OffsetList::new();
@@ -619,6 +639,7 @@ impl CellList {
             self.n_search.y,
             self.num_bins.y as i32,
             h_matrix.column(1).into(),
+            cell.pbc().y,
         );
 
         let mut sz_list = OffsetList::new();
@@ -627,6 +648,7 @@ impl CellList {
             self.n_search.z,
             self.num_bins.z as i32,
             h_matrix.column(2).into(),
+            cell.pbc().z,
         );
 
         let cutoff_sq_v = f64x4::from(cutoff_sq);
@@ -747,9 +769,9 @@ impl CellList {
         let h_matrix = cell.h();
 
         let frac_i = cell.to_fractional(&Vector3::new(pos_i_x, pos_i_y, pos_i_z));
-        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
-        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
-        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+        let bx = bin_index(frac_i.x, self.num_bins.x);
+        let by = bin_index(frac_i.y, self.num_bins.y);
+        let bz = bin_index(frac_i.z, self.num_bins.z);
 
         let i_orig = self.particles[i];
 
@@ -760,6 +782,7 @@ impl CellList {
             self.n_search.x,
             self.num_bins.x as i32,
             h_matrix.column(0).into(),
+            cell.pbc().x,
         );
 
         let mut sy_list = OffsetList::new();
@@ -768,6 +791,7 @@ impl CellList {
             self.n_search.y,
             self.num_bins.y as i32,
             h_matrix.column(1).into(),
+            cell.pbc().y,
         );
 
         let mut sz_list = OffsetList::new();
@@ -776,6 +800,7 @@ impl CellList {
             self.n_search.z,
             self.num_bins.z as i32,
             h_matrix.column(2).into(),
+            cell.pbc().z,
         );
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
@@ -912,9 +937,9 @@ impl CellList {
         let h_matrix = cell.h();
 
         let frac_i = cell.to_fractional(&Vector3::new(pos_i_x, pos_i_y, pos_i_z));
-        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
-        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
-        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+        let bx = bin_index(frac_i.x, self.num_bins.x);
+        let by = bin_index(frac_i.y, self.num_bins.y);
+        let bz = bin_index(frac_i.z, self.num_bins.z);
 
         let i_orig = self.particles[i];
         let mut local_counts = vec![0usize; sorted_cutoffs_sq.len()];
@@ -926,6 +951,7 @@ impl CellList {
             self.n_search.x,
             self.num_bins.x as i32,
             h_matrix.column(0).into(),
+            cell.pbc().x,
         );
 
         let mut sy_list = OffsetList::new();
@@ -934,6 +960,7 @@ impl CellList {
             self.n_search.y,
             self.num_bins.y as i32,
             h_matrix.column(1).into(),
+            cell.pbc().y,
         );
 
         let mut sz_list = OffsetList::new();
@@ -942,6 +969,7 @@ impl CellList {
             self.n_search.z,
             self.num_bins.z as i32,
             h_matrix.column(2).into(),
+            cell.pbc().z,
         );
 
         let max_cutoff_sq_v = f64x4::from(max_cutoff_sq);
@@ -1105,11 +1133,12 @@ impl CellList {
         let h_matrix = cell.h();
 
         let frac_i = cell.to_fractional(&Vector3::new(pos_i_x, pos_i_y, pos_i_z));
-        let bx = ((frac_i.x * self.num_bins.x as f64) as i32).min(self.num_bins.x as i32 - 1);
-        let by = ((frac_i.y * self.num_bins.y as f64) as i32).min(self.num_bins.y as i32 - 1);
-        let bz = ((frac_i.z * self.num_bins.z as f64) as i32).min(self.num_bins.z as i32 - 1);
+        let bx = bin_index(frac_i.x, self.num_bins.x);
+        let by = bin_index(frac_i.y, self.num_bins.y);
+        let bz = bin_index(frac_i.z, self.num_bins.z);
 
         let i_orig = self.particles[i];
+        let pbc = cell.pbc();
 
         let prune_limit = cutoff_sq.sqrt() + self.bin_bounding_radius;
         let prune_limit_sq = prune_limit * prune_limit;
@@ -1121,6 +1150,9 @@ impl CellList {
                     let (nbx, sx) = div_mod(bx + dx, self.num_bins.x as i32);
                     let (nby, sy) = div_mod(by + dy, self.num_bins.y as i32);
                     let (nbz, sz) = div_mod(bz + dz, self.num_bins.z as i32);
+                    if (sx != 0 && !pbc.x) || (sy != 0 && !pbc.y) || (sz != 0 && !pbc.z) {
+                        continue;
+                    }
 
                     let offset_vec = h_matrix * Vector3::new(sx as f64, sy as f64, sz as f64);
 
@@ -1172,6 +1204,12 @@ impl CellList {
             }
         }
     }
+}
+
+/// Bin of a fractional coordinate, clamped so atoms outside the box along a
+/// non-periodic axis land in the nearest edge bin.
+fn bin_index(frac: f64, num_bins: usize) -> i32 {
+    ((frac * num_bins as f64).floor() as i32).clamp(0, num_bins as i32 - 1)
 }
 
 fn div_mod(val: i32, max: i32) -> (usize, i32) {
@@ -1894,6 +1932,44 @@ mod tests {
         let neighbors = cl.search(&cell, &positions, cutoff);
 
         assert!(!neighbors.is_empty());
+    }
+
+    #[test]
+    fn test_self_images_half_list() {
+        // One atom in a 5 A box, cutoff 6: six images at 5 A, i.e. three
+        // self-image pairs in a half list, each with a positive canonical shift.
+        let h = Matrix3::identity() * 5.0;
+        let positions = vec![Vector3::new(0.3, 0.2, 0.1)];
+        let cutoff = 6.0;
+
+        let cell = Cell::new(h, Vector3::new(true, true, true)).unwrap();
+        let cl = CellList::build(&cell, &positions, cutoff);
+        let mut shifts: Vec<_> = cl
+            .search(&cell, &positions, cutoff)
+            .into_iter()
+            .map(|(_, _, sx, sy, sz)| (sx, sy, sz))
+            .collect();
+        shifts.sort();
+        assert_eq!(shifts, vec![(0, 0, 1), (0, 1, 0), (1, 0, 0)]);
+        let (ei, _, _) = cl.par_search_optimized(&cell, cutoff);
+        assert_eq!(ei.len(), 3);
+        let multi = cl.par_search_multi(&cell, &[cutoff], false);
+        assert_eq!(multi[0].0.len(), 3);
+
+        // Non-periodic z: no images along z, even though the box is smaller
+        // than the cutoff.
+        let cell = Cell::new(h, Vector3::new(true, true, false)).unwrap();
+        let cl = CellList::build(&cell, &positions, cutoff);
+        let mut shifts: Vec<_> = cl
+            .search(&cell, &positions, cutoff)
+            .into_iter()
+            .map(|(_, _, sx, sy, sz)| (sx, sy, sz))
+            .collect();
+        shifts.sort();
+        assert_eq!(shifts, vec![(0, 1, 0), (1, 0, 0)]);
+        let (ei, _, s) = cl.par_search_optimized(&cell, cutoff);
+        assert_eq!(ei.len(), 2);
+        assert!(s.chunks(3).all(|c| c[2] == 0));
     }
 
     #[test]

@@ -46,10 +46,18 @@ def _si_bulk(reps):
     return bulk("Si", cubic=True).repeat(reps)
 
 
+def _si_slab():
+    atoms = _si_bulk((2, 2, 2))
+    atoms.center(vacuum=5.0, axis=2)
+    atoms.pbc = (True, True, False)
+    return atoms
+
+
 SYSTEMS = [
     pytest.param(_si_bulk((1, 1, 1)), 7.0, id="si8-7A"),
     pytest.param(_si_bulk((2, 2, 1)), 7.0, id="si32-7A"),
     pytest.param(_si_bulk((4, 4, 3)), 20.0, id="si384-20A"),
+    pytest.param(_si_slab(), 12.0, id="slab-TTF-12A"),
     pytest.param(
         Atoms("H", positions=[[0.1, 0.2, 0.3]], cell=[2.0, 2.5, 3.0], pbc=True),
         6.5,
@@ -86,6 +94,39 @@ def test_multi_matches_ase(disjoint):
             cumulative += full
             full = cumulative
         assert full == _ase_full(atoms, rc), f"cutoff {rc}"
+
+
+def _slab_outside_box():
+    # Atoms straddle both z faces of a non-periodic axis.
+    atoms = _si_slab()
+    atoms.positions[:, 2] -= 8.0
+    return atoms
+
+
+def _peer_slab():
+    from ase.build import diamond100
+
+    atoms = diamond100("Si", size=(4, 4, 8), vacuum=12.0)
+    atoms.pbc = (True, True, False)
+    return atoms
+
+
+NON_PERIODIC = [
+    pytest.param(_si_slab(), 25.0, id="slab-cutoff-gt-vacuum"),
+    pytest.param(_slab_outside_box(), 12.0, id="slab-atoms-outside-box"),
+    pytest.param(_peer_slab(), 31.7506, id="si100-slab-60bohr"),
+]
+
+
+@pytest.mark.parametrize("parallel", [True, False])
+@pytest.mark.parametrize("atoms,cutoff", NON_PERIODIC)
+def test_no_images_along_non_periodic_axis(atoms, cutoff, parallel):
+    cell = neighborlist_rs.PyCell.from_ase(atoms)
+    res = neighborlist_rs.build_neighborlists(
+        cell, atoms.get_positions(), cutoff, parallel=parallel
+    )
+    assert not res["shift"][:, 2].any()
+    _assert_matches_ase(res, atoms, cutoff)
 
 
 def test_batch_matches_ase():

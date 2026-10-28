@@ -2,6 +2,7 @@ pub mod api;
 pub mod batch;
 pub mod cell;
 pub mod config;
+pub mod half_list;
 pub mod search;
 pub mod single;
 

@@ -93,6 +93,29 @@ fn main() -> Result<(), String> {
 }
 ```
 
+### Half List with Compact Output (`build_half_list`)
+
+For large cutoffs and repeated calls (e.g. DFT-D3 at 60 Bohr), `build_half_list` returns the same pairs as `build_neighborlists` as separate `u32`/`i32` arrays:
+
+```rust
+use neighborlist_rs::build_half_list;
+
+fn main() -> Result<(), String> {
+    let positions = [[0.0, 0.0, 0.0], [1.0, 0.5, 0.0]];
+    let cell = [[3.0, 0.0, 0.0], [1.5, 2.6, 0.0], [0.0, 0.0, 10.0]]; // rows
+    let list = build_half_list(&positions, 31.75, Some((&cell, [true, true, false])))?;
+    for e in 0..list.len() {
+        let (i, j, s) = (list.i[e], list.j[e], list.shifts[e]);
+        // r_ij = x_j - x_i + s[0] * cell[0] + s[1] * cell[1] + s[2] * cell[2]
+    }
+    Ok(())
+}
+```
+
+- Pairs have `i < j`, or `i == j` with the first non-zero component of the shift positive. The cell convention is the same as for `build_neighborlists`; `None` means an isolated system.
+- Each candidate pair is evaluated once by sorted index, a branchless count pass sizes the output, and the fill pass writes it once, in parallel, with no concatenation.
+- It runs on rayon's *current* pool, so you can call it inside your own `ThreadPool::install`. It never changes the global pool. The output order is deterministic and does not depend on the thread count.
+
 ## Data Schema
 
 ### `NeighborList` Struct

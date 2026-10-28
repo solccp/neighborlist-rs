@@ -1,4 +1,6 @@
 use crate::batch;
+use crate::cell::Cell;
+use crate::half_list;
 use crate::single;
 use nalgebra::{Matrix3, Vector3};
 
@@ -40,6 +42,47 @@ pub fn build_neighborlists(
         edge_index: edge_i,
         shifts,
     })
+}
+
+pub use crate::half_list::HalfList;
+
+/// Build a half neighbor list as separate `u32`/`i32` arrays.
+///
+/// Same pairs and cell convention as [`build_neighborlists`] (lattice vectors
+/// as the **rows** of `h`, `r = x_j - x_i + shifts[e] · h`), with `i < j`, or
+/// `i == j` and the first non-zero component of the shift positive. Images are
+/// generated only along periodic axes; `None` means an isolated system.
+///
+/// Unlike [`build_neighborlists`], each candidate pair is evaluated once and the
+/// output is filled without a serial concatenation, which matters at large
+/// cutoffs (e.g. D3 at 60 Bohr). Runs on rayon's current thread pool, so it can
+/// be called inside the caller's `ThreadPool::install`. The output order is
+/// deterministic and independent of the thread count.
+pub fn build_half_list(
+    positions: &[[f64; 3]],
+    cutoff: f64,
+    cell: Option<(&[[f64; 3]; 3], [bool; 3])>,
+) -> Result<HalfList, String> {
+    if !cutoff.is_finite() || cutoff <= 0.0 {
+        return Err(format!("cutoff must be positive and finite, got {cutoff}"));
+    }
+    if positions.len() > u32::MAX as usize {
+        return Err("too many atoms for u32 indices".into());
+    }
+    if positions.iter().flatten().any(|x| !x.is_finite()) {
+        return Err("positions must be finite".into());
+    }
+    let pos_vec = convert_positions(positions);
+    let cell = match cell {
+        Some((h, pbc)) if pbc.iter().any(|&p| p) => {
+            Cell::new(convert_cell(h), Vector3::new(pbc[0], pbc[1], pbc[2]))
+                .map_err(|e| e.to_string())?
+        }
+        // Isolated: Cartesian axes, no images; bins span the atoms' extent.
+        _ => Cell::new(Matrix3::identity(), Vector3::new(false, false, false))
+            .map_err(|e| e.to_string())?,
+    };
+    Ok(half_list::build(&cell, &pos_vec, cutoff))
 }
 
 type CellInfo = ([[f64; 3]; 3], [bool; 3]);
